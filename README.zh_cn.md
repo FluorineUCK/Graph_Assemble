@@ -2,9 +2,11 @@
 
 [English](README.md) | 简体中文
 
+<img src="src/main/resources/logo.png" alt="图装配图标" width="128" height="128">
+
 Graph Assembly 为 Minecraft 1.21.1、NeoForge 21.1.234 和 Create 6.0.10 提供有向图加工配方。图中的节点代表加工步骤，工件携带进度并在抵达出口后结算。需要 Java 21。
 
-版本：**0.1.0（开发中）**。
+版本：**[0.1.0](https://github.com/FluorineUCK/Graph_Assemble/releases/tag/v0.1.0)**。
 
 ## 支持范围
 

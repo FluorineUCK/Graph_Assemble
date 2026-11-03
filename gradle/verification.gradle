@@ -40,6 +40,14 @@ tasks.register('verifyDistribution') {
         def artifact = tasks.named('jar').get().archiveFile.get().asFile
         new java.util.zip.ZipFile(artifact).withCloseable { zip ->
             def names = zip.entries().collect { it.name }
+            def metadata = zip.getInputStream(zip.getEntry('META-INF/neoforge.mods.toml')).getText('UTF-8')
+            def logoDeclaration = metadata =~ /(?m)^logoFile\s*=\s*"([^"]+)"/
+            if (!logoDeclaration.find()) throw new GradleException('Missing mod logo declaration')
+            def logo = logoDeclaration.group(1)
+            if (!names.contains(logo)) throw new GradleException("Missing declared mod logo: ${logo}")
+            if (!Arrays.equals(zip.getInputStream(zip.getEntry(logo)).bytes, file("src/main/resources/${logo}").bytes)) {
+                throw new GradleException('Packaged mod logo does not match source')
+            }
             if (names.any { it.startsWith('compat-backlog/') || it.startsWith('dev/graphassembly/compat/machines/') || it.startsWith('dev/graphassembly/mixin/compat/') }) {
                 throw new GradleException('Addon-specific adapters or backup sources leaked into the first release')
             }

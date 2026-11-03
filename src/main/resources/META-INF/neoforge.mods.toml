@@ -5,6 +5,8 @@ license="MIT"
 modId="graph_assembly"
 version="0.1.0"
 displayName="Graph Assembly"
+logoFile="logo.png"
+logoBlur=false
 description='''Directed graph processing recipes for Create.'''
 [[dependencies.graph_assembly]]
 modId="neoforge"

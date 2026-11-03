@@ -2,9 +2,11 @@
 
 English | [简体中文](README.zh_cn.md)
 
+<img src="src/main/resources/logo.png" alt="Graph Assembly icon" width="128" height="128">
+
 Graph Assembly adds directed-graph processing recipes for Minecraft 1.21.1, NeoForge 21.1.234, and Create 6.0.10. Graph nodes represent processing steps; workpieces carry progress and are settled when they reach a finish node. Java 21 is required.
 
-Version: **0.1.0 (in development)**.
+Version: **[0.1.0](https://github.com/FluorineUCK/Graph_Assemble/releases/tag/v0.1.0)**.
 
 ## Supported features
 

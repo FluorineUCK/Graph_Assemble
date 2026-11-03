@@ -2,7 +2,7 @@
 
 English | [简体中文](CHANGELOG.zh_cn.md)
 
-## Unreleased
+## 0.1.0 — 2026-11-03
 
 ### Graph rules and recipes
 
@@ -26,6 +26,7 @@ English | [简体中文](CHANGELOG.zh_cn.md)
 
 ### Interface
 
+- Added the project icon to the mod list and repository documentation.
 - Primary and auxiliary workpiece hints for merge steps now list the other required workpiece, and the stop message for ready auxiliary workpieces is corrected.
 - Graph filters use Create's native Shift summary, colors, and line wrapping; empty configurations no longer show zero-item conditions.
 - Removed hover tooltips from the candidate overlay's `×` and `+N` controls; click behavior remains.
