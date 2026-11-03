@@ -1,0 +1,66 @@
+// Build contracts: verify the actual model consumed by ModDevGradle and the release archive.
+tasks.register('verifyRunIsolation') {
+    dependsOn tasks.named('classes')
+    def report = layout.buildDirectory.file('verification/run-isolation.json')
+    outputs.file(report)
+    outputs.upToDateWhen { false }
+    doLast {
+        def leaked = sourceSets.main.output.asFileTree.matching {
+            include 'dev/graphassembly/gametest/**'
+            include 'data/graph_assembly/structure/test_empty.nbt'
+            include 'data/graph_assembly_examples/**'
+        }.files.sort { it.absolutePath }
+        if (!leaked.isEmpty()) {
+            throw new GradleException("Stale test files in main output. Clean or archive the old generated outputs before running; this check does not delete files:\n${leaked.join('\n')}")
+        }
+        def expected = [client: false, server: false, verificationClient: true, gameTestServer: true]
+        def result = [:]
+        expected.each { name, hasTests ->
+            def run = neoForge.runs.getByName(name)
+            def sources = run.loadedMods.get().collectMany { it.modSourceSets.get() }.collect { it.name }.unique().sort()
+            def wanted = hasTests ? ['gametest', 'main'] : ['main']
+            if (sources != wanted || run.sourceSet.get().name != (hasTests ? 'gametest' : 'main')) {
+                throw new GradleException("${name} leaks or omits test sources: ${sources}, runtime=${run.sourceSet.get().name}")
+            }
+            result[name] = [modSourceSets: sources, runtimeSourceSet: run.sourceSet.get().name]
+        }
+        def file = report.get().asFile
+        file.parentFile.mkdirs()
+        file.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(result))
+    }
+}
+tasks.matching { it.name in ['prepareClientRun', 'prepareServerRun'] }.configureEach {
+    dependsOn tasks.named('verifyRunIsolation')
+}
+
+tasks.register('verifyDistribution') {
+    dependsOn tasks.named('jar')
+    inputs.file(tasks.named('jar').flatMap { it.archiveFile })
+    doLast {
+        def artifact = tasks.named('jar').get().archiveFile.get().asFile
+        new java.util.zip.ZipFile(artifact).withCloseable { zip ->
+            def names = zip.entries().collect { it.name }
+            if (names.any { it.startsWith('compat-backlog/') || it.startsWith('dev/graphassembly/compat/machines/') || it.startsWith('dev/graphassembly/mixin/compat/') }) {
+                throw new GradleException('Addon-specific adapters or backup sources leaked into the first release')
+            }
+            def mixins = new groovy.json.JsonSlurper().parse(zip.getInputStream(zip.getEntry('graph_assembly.mixins.json')))
+            if (['mixins', 'client', 'server'].any { side -> (mixins[side] ?: []).any { it.startsWith('compat.') } }) {
+                throw new GradleException('First release must not register addon-specific mixins')
+            }
+            if (names.any { it.startsWith('dev/graphassembly/gametest/') || it == 'data/graph_assembly/structure/test_empty.nbt' || it.startsWith('data/graph_assembly_examples/') }) {
+                throw new GradleException('Test classes or structures leaked into the release')
+            }
+            def license = 'META-INF/licenses/create-factory-controller.txt'
+            if (!names.contains(license)) throw new GradleException('Missing background attribution')
+            if (!Arrays.equals(zip.getInputStream(zip.getEntry(license)).bytes, file("src/main/resources/${license}").bytes)) {
+                throw new GradleException('Release attribution does not match source')
+            }
+            def projectLicense = 'META-INF/licenses/graph-assembly.txt'
+            if (!names.contains(projectLicense)) throw new GradleException('Missing project MIT license')
+            if (!Arrays.equals(zip.getInputStream(zip.getEntry(projectLicense)).bytes, file('LICENSE').bytes)) {
+                throw new GradleException('Release project license does not match LICENSE')
+            }
+        }
+    }
+}
+tasks.named('check') { dependsOn 'verifyRunIsolation', 'verifyDistribution' }

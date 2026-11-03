@@ -1,0 +1,130 @@
+plugins {
+    id 'java'
+    id 'net.neoforged.moddev' version '2.0.141'
+}
+
+group = 'dev.graphassembly'
+version = '0.1.0'
+base.archivesName = 'graph-assembly-1.21.1'
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+sourceSets {
+    gametest {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+configurations {
+    gametestImplementation.extendsFrom implementation
+    gametestCompileOnly.extendsFrom compileOnly
+    gametestRuntimeOnly.extendsFrom runtimeOnly
+}
+
+neoForge {
+    version = '21.1.234'
+    addModdingDependenciesTo(sourceSets.gametest)
+    mods {
+        graph_assembly { sourceSet sourceSets.main }
+        graph_assembly_verification {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.gametest
+        }
+    }
+    runs {
+        client { client(); loadedMods = [mods.graph_assembly] }
+        server { server(); programArgument '--nogui'; loadedMods = [mods.graph_assembly] }
+        verificationClient {
+            client()
+            sourceSet = sourceSets.gametest
+            loadedMods = [mods.graph_assembly_verification]
+            gameDirectory = file('run/verification/client')
+        }
+        gameTestServer {
+            type = 'gameTestServer'
+            sourceSet = sourceSets.gametest
+            loadedMods = [mods.graph_assembly_verification]
+            gameDirectory = file('run/gametest')
+            systemProperty 'neoforge.enabledGameTestNamespaces', providers.gradleProperty('graphAssembly.testNamespaces').orElse('graph_assembly').get()
+            systemProperty 'graphAssembly.expectedRecipes', providers.gradleProperty('graphAssembly.expectedRecipes').orElse('').get()
+        }
+    }
+}
+repositories {
+    maven { url = 'https://maven.latvian.dev/releases'; content { includeGroup 'dev.latvian.mods' } }
+    maven { url = 'https://maven.createmod.net' }
+    maven { url = 'https://maven.ithundxr.dev/snapshots' }
+    maven { url = 'https://maven.blamejared.com' }
+    mavenCentral()
+}
+dependencies {
+    implementation('com.simibubi.create:create-1.21.1:6.0.10-281') { transitive = false }
+    implementation 'com.tterrag.registrate:Registrate:MC1.21-1.3.0+67'
+    implementation 'net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1'
+    compileOnly 'dev.engine-room.flywheel:flywheel-neoforge-api-1.21.1:1.0.6'
+    runtimeOnly 'dev.engine-room.flywheel:flywheel-neoforge-1.21.1:1.0.6'
+    compileOnly 'mezz.jei:jei-1.21.1-common-api:19.39.0.368'
+    compileOnly 'mezz.jei:jei-1.21.1-neoforge-api:19.39.0.368'
+    compileOnly('dev.latvian.mods:kubejs-neoforge:2101.7.2-build.379') { transitive = false }
+    compileOnly('dev.latvian.mods:rhino:2101.2.7-build.81') { transitive = false }
+    if (project.hasProperty('withKubejs')) {
+        runtimeOnly('dev.latvian.mods:kubejs-neoforge:2101.7.2-build.379') { transitive = false }
+        runtimeOnly('dev.latvian.mods:rhino:2101.2.7-build.81') { transitive = false }
+    }
+    if (!project.hasProperty('withoutJei')) runtimeOnly 'mezz.jei:jei-1.21.1-neoforge:19.39.0.368'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testImplementation 'net.neoforged:bus:8.0.5'
+    testImplementation 'com.google.code.gson:gson:2.10.1'
+    testImplementation 'org.joml:joml:1.10.5'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.release = 21 }
+tasks.withType(Test).configureEach { useJUnitPlatform() }
+tasks.named('processGametestResources') {
+    from('src/gametest/resources/data/graph_assembly/structure/test_empty.nbt') {
+        into 'data/graph_assembly_examples/structure'
+    }
+}
+apply from: 'gradle/verification.gradle'
+jar {
+    from('LICENSE') {
+        into 'META-INF/licenses'
+        rename { 'graph-assembly.txt' }
+    }
+    exclude 'dev/graphassembly/gametest/**'
+    exclude 'data/graph_assembly/structure/test_empty.nbt'
+    // Keep the artist's comparison file in the workspace, not in the release.
+    exclude 'assets/graph_assembly/textures/gui/graph_gui_old.png'
+}
+if (project.hasProperty('withKubejs')) {
+    def kubeExamples = providers.gradleProperty('graphAssembly.kubeExamples')
+        .orElse('graph_assembly.js,item_first.js,multi_workpiece.js,three_path_outputs.js,filter_crafting.js')
+        .get().split(',').toList()
+    kubeExamples.each { name ->
+        if (!(name ==~ /[a-z0-9_]+\.js/) || !file("examples/kubejs/${name}").isFile())
+            throw new GradleException("Unknown KubeJS example: ${name}")
+    }
+    def stageKubeTest = tasks.register('stageKubeGameTest', Sync) {
+        from 'src/gametest/kubejs'
+        from('examples/kubejs') {
+            include kubeExamples
+        }
+        into 'run/gametest/kubejs/server_scripts/graph_assembly_verification'
+        preserve { include '.graph-assembly-staging' }
+        // Always check ownership, including when only the surrounding profile changed.
+        outputs.upToDateWhen { false }
+        doFirst {
+            def scripts = destinationDir
+            def legacy = new File(scripts.parentFile, 'graph_test.js')
+            if (legacy.exists()) {
+                throw new GradleException("Legacy KubeJS staging found at ${legacy}. Use a fresh profile or manually migrate the old generated scripts; no scripts were deleted.")
+            }
+            def marker = new File(scripts, '.graph-assembly-staging')
+            if (scripts.exists() && scripts.listFiles()?.length && !marker.isFile()) {
+                throw new GradleException("Refusing to sync nonempty unowned KubeJS directory ${scripts}. Use a fresh profile or manually migrate it; no scripts were deleted.")
+            }
+            scripts.mkdirs()
+            marker.text = 'Owned by stageKubeGameTest; generated verification scripts only.\n'
+            logger.lifecycle("KubeJS generated scripts in ${scripts}: graph_test.js, ${kubeExamples.join(', ')}")
+        }
+    }
+    tasks.named('runGameTestServer') { dependsOn stageKubeTest }
+}

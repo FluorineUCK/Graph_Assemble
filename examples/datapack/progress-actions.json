@@ -1,0 +1,40 @@
+{
+  "type": "graph_assembly:assembly",
+  "ingredient": {"item": "minecraft:phantom_membrane"},
+  "transitional_item": "minecraft:iron_nugget",
+  "nodes": [
+    {"id": "start", "start": true, "position": [-120, -55],
+     "recipe": {"type": "create:pressing"}, "rewards": {"defect": 3}},
+    {"id": "inspect", "checkpoint": true, "position": [0, -55],
+     "recipe": {"type": "create:cutting", "processing_time": 40}},
+    {"id": "rework", "position": [-120, 65],
+     "recipe": {"type": "create:milling", "processing_time": 40},
+     "progress_actions": [
+       {"type": "clear_mark", "mark": "defect", "count": 2},
+       {"type": "clear_checkpoint", "node": "inspect"},
+       {"type": "pop_checkpoint"},
+       {"type": "goto_node", "node": "inspect"}
+     ]},
+    {"id": "repair", "position": [0, 65],
+     "recipe": {"type": "create:deploying", "ingredients": [{"item": "minecraft:redstone"}]},
+     "progress_actions": [
+       {"type": "clear_mark", "mark": "defect"},
+       {"type": "enter_edge", "from": "inspect", "to": "finish"}
+     ]},
+    {"id": "finish", "finish": true, "finish_mode": "strict", "position": [120, -55],
+     "recipe": {"type": "create:pressing"}, "scrap": [{"item": "minecraft:flint"}]}
+  ],
+  "edges": [
+    {"from": "start", "to": "inspect"},
+    {"from": "inspect", "to": "rework"},
+    {"from": "inspect", "to": "repair"},
+    {"from": "inspect", "to": "finish"}
+  ],
+  "outputs": [{
+    "requirements": {
+      "mark_ranges": {"defect": {"max": 1}},
+      "checkpoints": {"mode": "partial", "nodes": ["inspect", "finish"]}
+    },
+    "results": [{"item": "minecraft:diamond"}]
+  }]
+}

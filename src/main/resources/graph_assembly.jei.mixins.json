@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.graphassembly.mixin",
+  "plugin": "dev.graphassembly.mixin.jei.JeiObservationMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "client": ["jei.RecipeSlotObservationMixin", "jei.NativeTooltipObservationMixin", "common.client.GuiScissorObservationMixin"],
+  "injectors": {"defaultRequire": 1}
+}

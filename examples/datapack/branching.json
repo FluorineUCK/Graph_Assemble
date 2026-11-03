@@ -1,0 +1,155 @@
+{
+  "type": "graph_assembly:assembly",
+  "ingredient": {
+    "item": "minecraft:iron_ingot"
+  },
+  "transitional_item": "minecraft:iron_nugget",
+  "nodes": [
+    {
+      "id": "start",
+      "start": true,
+      "recipe": {
+        "type": "create:pressing"
+      }
+    },
+    {
+      "id": "polish",
+      "checkpoint": true,
+      "rewards": {
+        "polished": 1
+      },
+      "reward_limit": 1,
+      "recipe": {
+        "type": "create:deploying",
+        "ingredients": [
+          {
+            "item": "minecraft:flint"
+          }
+        ],
+        "keep_held_item": true
+      }
+    },
+    {
+      "id": "quench",
+      "rewards": {
+        "quenched": 1
+      },
+      "reward_limit": 1,
+      "recipe": {
+        "type": "create:filling",
+        "ingredients": [
+          {
+            "type": "neoforge:single",
+            "fluid": "minecraft:water",
+            "amount": 250
+          }
+        ]
+      }
+    },
+    {
+      "id": "mill",
+      "branch_mode": "random",
+      "recipe": {
+        "type": "create:milling",
+        "processing_time": 40
+      }
+    },
+    {
+      "id": "retry",
+      "recipe": {
+        "type": "create:pressing"
+      }
+    },
+    {
+      "id": "finish",
+      "finish": true,
+      "rewards": {
+        "complete": 1
+      },
+      "recipe": {
+        "type": "create:cutting",
+        "processing_time": 40
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "start",
+      "to": "polish"
+    },
+    {
+      "from": "start",
+      "to": "quench"
+    },
+    {
+      "from": "polish",
+      "to": "mill"
+    },
+    {
+      "from": "quench",
+      "to": "mill"
+    },
+    {
+      "from": "mill",
+      "to": "finish",
+      "weight": 3
+    },
+    {
+      "from": "mill",
+      "to": "retry",
+      "weight": 1
+    },
+    {
+      "from": "retry",
+      "to": "polish"
+    }
+  ],
+  "outputs": [
+    {
+      "results": [
+        {
+          "item": "minecraft:iron_ingot",
+          "count": 2,
+          "weight": 3
+        },
+        {
+          "item": "minecraft:flint",
+          "weight": 1
+        }
+      ],
+      "requirements": {
+        "marks": {
+          "polished": 1,
+          "complete": 1
+        }
+      }
+    },
+    {
+      "results": [
+        {
+          "item": "minecraft:gold_ingot"
+        }
+      ],
+      "requirements": {
+        "marks": {
+          "quenched": 1,
+          "complete": 1
+        }
+      }
+    },
+    {
+      "results": [
+        {
+          "item": "minecraft:diamond"
+        }
+      ],
+      "requirements": {
+        "marks": {
+          "polished": 1,
+          "quenched": 1,
+          "complete": 1
+        }
+      }
+    }
+  ]
+}

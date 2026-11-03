@@ -1,0 +1,53 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.graphassembly.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "common.OrdinaryRecipeQueryMixin",
+    "common.AbstractFurnaceGraphMixin",
+    "common.CampfireGraphMixin",
+    "common.BrewingStandMixin",
+    "common.ItemEntityFanStateMixin",
+    "common.CrafterBlockMixin",
+    "common.CrafterMenuMixin",
+    "common.StonecutterMenuMixin",
+    "common.SmithingMenuMixin",
+    "common.AnvilMenuMixin",
+    "common.SmithingTransformAccess",
+    "common.SmithingTrimAccess",
+    "common.ItemCombinerMenuMixin",
+    "common.StonecutterResultSlotMixin",
+    "common.CraftingMenuMixin",
+    "common.InventoryMenuMixin",
+    "common.CraftingMenuStateMixin",
+    "common.CraftingResultSlotMixin",
+    "common.CraftingResultContainerMixin",
+    "create.ProcessingRecipeMixin",
+    "create.PressMixin",
+    "create.DeployerMixin",
+    "create.DeployerActivationMixin",
+    "create.BasinOperatingMixin",
+    "create.BasinRecipeMixin",
+    "create.SawMixin",
+    "create.SpoutMixin",
+    "create.MillstoneMixin",
+    "create.FanProcessingMixin",
+    "create.TransportedItemStackFanStateMixin",
+    "create.MechanicalCrafterGraphMixin",
+    "create.GroupedItemsAccess",
+    "common.projection.IngredientCodecMixin",
+    "create.projection.RecipeFinderViewMixin",
+    "common.projection.RecipeLifecycleMixin",
+    "create.projection.CandidateTrieMixin",
+    "create.projection.CandidateRecipeMixin",
+    "create.projection.ProofInventoryMixin",
+    "common.projection.ProofStackMixin"
+  ],
+  "client": [
+    "jei.JeiRecipeLayoutResizeMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

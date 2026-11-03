@@ -1,0 +1,25 @@
+.gradle/
+build/
+run/
+.idea/
+*.iml
+.local/
+.superpowers/
+archive/
+logs/
+evidence/
+__pycache__/
+verification/
+tools/
+docs/implementation/
+docs/history/
+docs/maintainers/
+*.pyc
+
+# Local development entry points and withdrawn compatibility experiments.
+/run-client.ps1
+/gradle/local-environment.init.gradle
+/compat-backlog/
+
+# Artist's comparison copy; the active atlas stays in source control.
+/src/main/resources/assets/graph_assembly/textures/gui/graph_gui_old.png

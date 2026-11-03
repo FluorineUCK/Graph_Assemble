@@ -1,0 +1,160 @@
+{
+  "type": "graph_assembly:assembly",
+  "ingredient": {
+    "item": "minecraft:copper_ingot"
+  },
+  "transitional_item": "minecraft:iron_nugget",
+  "nodes": [
+    {
+      "id": "start",
+      "start": true,
+      "recipe": {
+        "type": "create:pressing"
+      }
+    },
+    {
+      "id": "polish",
+      "checkpoint": true,
+      "rewards": {
+        "polished": 1
+      },
+      "reward_limit": 1,
+      "recipe": {
+        "type": "create:deploying",
+        "ingredients": [
+          {
+            "item": "minecraft:flint"
+          }
+        ],
+        "keep_held_item": true
+      }
+    },
+    {
+      "id": "quench",
+      "rewards": {
+        "quenched": 1
+      },
+      "reward_limit": 1,
+      "recipe": {
+        "type": "create:filling",
+        "ingredients": [
+          {
+            "type": "neoforge:single",
+            "fluid": "minecraft:water",
+            "amount": 250
+          }
+        ]
+      }
+    },
+    {
+      "id": "mill",
+      "branch_mode": "random",
+      "recipe": {
+        "type": "create:milling",
+        "processing_time": 40
+      }
+    },
+    {
+      "id": "retry",
+      "recipe": {
+        "type": "create:pressing"
+      }
+    },
+    {
+      "id": "finish",
+      "finish": true,
+      "rewards": {
+        "complete": 1
+      },
+      "recipe": {
+        "type": "create:cutting",
+        "processing_time": 40
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "start",
+      "to": "polish"
+    },
+    {
+      "from": "start",
+      "to": "quench"
+    },
+    {
+      "from": "polish",
+      "to": "mill"
+    },
+    {
+      "from": "quench",
+      "to": "mill"
+    },
+    {
+      "from": "mill",
+      "to": "finish",
+      "weight": 3
+    },
+    {
+      "from": "mill",
+      "to": "retry",
+      "weight": 1
+    },
+    {
+      "from": "retry",
+      "to": "polish"
+    }
+  ],
+  "outputs": [
+    {
+      "finish": "finish",
+      "requirements": {
+        "mode": "partial",
+        "marks": {
+          "polished": 1
+        },
+        "checkpoints": [
+          "start",
+          "polish",
+          "finish"
+        ]
+      },
+      "results": [
+        {
+          "item": "minecraft:diamond",
+          "weight": 3
+        }
+      ]
+    },
+    {
+      "finish": "finish",
+      "requirements": {
+        "mode": "partial",
+        "marks": {
+          "quenched": 1
+        }
+      },
+      "results": [
+        {
+          "item": "minecraft:gold_ingot",
+          "weight": 2
+        }
+      ]
+    },
+    {
+      "requirements": {
+        "checkpoints": {
+          "mode": "partial",
+          "nodes": [
+            "start",
+            "finish"
+          ]
+        }
+      },
+      "results": [
+        {
+          "item": "minecraft:iron_ingot"
+        }
+      ]
+    }
+  ]
+}

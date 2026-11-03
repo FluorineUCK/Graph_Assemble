@@ -1,0 +1,54 @@
+package dev.graphassembly.compat.kubejs;
+
+import com.google.gson.JsonObject;
+import dev.latvian.mods.kubejs.recipe.KubeRecipe;
+import dev.latvian.mods.rhino.Context;
+
+/** KubeJS-only facade; the shared writer and the runtime never load KubeJS types. */
+public final class KubeGraphBuilder {
+    private final GraphBuilder writer;
+    public KubeGraphBuilder(String transitionalItem) { writer = new GraphBuilder(transitionalItem); }
+
+    public KubeGraphBuilder ingredient(Context cx, Object value) {
+        writer.ingredient(KubeGraphValues.ingredient(cx, value));
+        return this;
+    }
+    public KubeGraphBuilder node(Context cx, String id, Object value) { return node(cx, id, value, new JsonObject()); }
+    public KubeGraphBuilder node(Context cx, String id, Object value, Object options) {
+        var settings = KubeGraphValues.options(cx, options);
+        Object unwrapped = KubeGraphValues.unwrap(value);
+        if (unwrapped instanceof KubeRecipe recipe) {
+            var snapshot = KubeNativeRecipe.snapshot(recipe);
+            nativeSettings(settings);
+            writer.node(id, snapshot, settings);
+            KubeNativeRecipe.consume(recipe);
+        } else {
+            var json = KubeGraphValues.json(cx, unwrapped).getAsJsonObject();
+            if (settings.has("recipe_mode") && settings.get("recipe_mode").getAsString().equals("native") && !json.has("recipe_id"))
+                KubeNativeRecipe.validate(json);
+            writer.node(id, json, settings);
+        }
+        return this;
+    }
+    public KubeGraphBuilder nativeNode(Context cx, String id, Object value) { return nativeNode(cx, id, value, new JsonObject()); }
+    public KubeGraphBuilder nativeNode(Context cx, String id, Object value, Object options) {
+        if (KubeGraphValues.unwrap(value) instanceof KubeRecipe) return node(cx, id, value, options);
+        var recipe = KubeGraphValues.json(cx, value).getAsJsonObject();
+        KubeNativeRecipe.validate(recipe);
+        var settings = KubeGraphValues.options(cx, options);
+        nativeSettings(settings);
+        writer.node(id, recipe, settings);
+        return this;
+    }
+    private static void nativeSettings(JsonObject options) {
+        if (options.has("recipe_mode") && !options.get("recipe_mode").getAsString().equals("native"))
+            throw new IllegalArgumentException("An upstream recipe object is complete: recipe_mode must be native");
+        options.addProperty("recipe_mode", "native");
+    }
+    public KubeGraphBuilder edge(String from, String to) { writer.edge(from, to); return this; }
+    public KubeGraphBuilder edge(String from, String to, JsonObject options) { writer.edge(from, to, options); return this; }
+    public KubeGraphBuilder weightedEdge(String from, String to, double weight) { writer.weightedEdge(from, to, weight); return this; }
+    public KubeGraphBuilder bidirectionalEdge(String from, String to) { writer.bidirectionalEdge(from, to); return this; }
+    public KubeGraphBuilder output(Context cx, Object value) { writer.output(KubeGraphValues.rule(cx, value)); return this; }
+    public JsonObject build() { return writer.build(); }
+}

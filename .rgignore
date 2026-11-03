@@ -1,0 +1,7 @@
+archive/
+run/
+build/
+.local/
+.superpowers/
+.gradle/
+.idea/
