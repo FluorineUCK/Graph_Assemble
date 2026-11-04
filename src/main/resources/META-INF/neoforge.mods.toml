@@ -3,7 +3,7 @@ loaderVersion="[4,)"
 license="MIT"
 [[mods]]
 modId="graph_assembly"
-version="0.1.0"
+version="0.1.1"
 displayName="Graph Assembly"
 logoFile="logo.png"
 logoBlur=false
@@ -29,7 +29,7 @@ side="BOTH"
 [[dependencies.graph_assembly]]
 modId="jei"
 type="optional"
-versionRange="[19.39.0.368]"
+versionRange="[19.39.0.368,19.70.0.469]"
 ordering="AFTER"
 side="CLIENT"
 [[mixins]]

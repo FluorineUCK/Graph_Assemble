@@ -6,7 +6,7 @@
 
 Graph Assembly 为 Minecraft 1.21.1、NeoForge 21.1.234 和 Create 6.0.10 提供有向图加工配方。图中的节点代表加工步骤，工件携带进度并在抵达出口后结算。需要 Java 21。
 
-版本：**[0.1.0](https://github.com/FluorineUCK/Graph_Assemble/releases/tag/v0.1.0)**。
+版本：**[0.1.1](https://github.com/FluorineUCK/Graph_Assemble/releases/tag/v0.1.1)**。
 
 ## 支持范围
 
@@ -25,7 +25,7 @@ Graph Assembly 为 Minecraft 1.21.1、NeoForge 21.1.234 和 Create 6.0.10 提供
 
 ## 安装
 
-客户端和服务端均需安装本模组、Create 及其依赖。版本要求：Minecraft 1.21.1、NeoForge 21.1.234 或更高的 21.1 版本、Create 6.0.10。JEI 19.39.0.368 与 KubeJS NeoForge 2101.7.2-build.379 为可选依赖。
+客户端和服务端均需安装本模组、Create 及其依赖。版本要求：Minecraft 1.21.1、NeoForge 21.1.234 或更高的 21.1 版本、Create 6.0.10。JEI 19.39.0.368–19.70.0.469 与 KubeJS NeoForge 2101.7.2-build.379 为可选依赖。
 
 ## 文档
 

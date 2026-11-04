@@ -2,6 +2,13 @@
 
 English | [简体中文](CHANGELOG.zh_cn.md)
 
+## 0.1.1 — 2026-11-04
+
+### Fixed
+
+- Relaxed the optional JEI dependency from an exact version pin to `19.39.0.368`–`19.70.0.469` (inclusive), allowing modpacks to use newer compatible JEI builds.
+- Recipe formats, processing behavior, and Mixin implementations are unchanged.
+
 ## 0.1.0 — 2026-11-03
 
 ### Graph rules and recipes

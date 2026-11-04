@@ -6,7 +6,7 @@ English | [简体中文](README.zh_cn.md)
 
 Graph Assembly adds directed-graph processing recipes for Minecraft 1.21.1, NeoForge 21.1.234, and Create 6.0.10. Graph nodes represent processing steps; workpieces carry progress and are settled when they reach a finish node. Java 21 is required.
 
-Version: **[0.1.0](https://github.com/FluorineUCK/Graph_Assemble/releases/tag/v0.1.0)**.
+Version: **[0.1.1](https://github.com/FluorineUCK/Graph_Assemble/releases/tag/v0.1.1)**.
 
 ## Supported features
 
@@ -25,7 +25,7 @@ Addon custom machines do not automatically support graph recipe execution. See t
 
 ## Installation
 
-Install this mod, Create, and their dependencies on both client and server. Requirements: Minecraft 1.21.1, NeoForge 21.1.234 or later in the 21.1 line, and Create 6.0.10. JEI 19.39.0.368 and KubeJS NeoForge 2101.7.2-build.379 are optional dependencies.
+Install this mod, Create, and their dependencies on both client and server. Requirements: Minecraft 1.21.1, NeoForge 21.1.234 or later in the 21.1 line, and Create 6.0.10. JEI 19.39.0.368–19.70.0.469 and KubeJS NeoForge 2101.7.2-build.379 are optional dependencies.
 
 ## Documentation
 

@@ -2,7 +2,7 @@
 
 English | [简体中文](kubejs.zh_cn.md)
 
-For modpack and recipe authors. This guide covers **Graph Assembly 0.1.0 and Minecraft 1.21.1**. Workpieces and settlement support items only; supported machines may use fluids as native auxiliary resources.
+For modpack and recipe authors. This guide covers **Graph Assembly 0.1.1 and Minecraft 1.21.1**. Workpieces and settlement support items only; supported machines may use fluids as native auxiliary resources.
 
 Graph Assembly represents each processing operation as a node and each allowed next operation as a directed edge. As a workpiece moves between machines, it carries its current node, marks, and checkpoint history. At an exit, it is settled according to the configured rules.
 
@@ -32,11 +32,11 @@ Graph Assembly represents each processing operation as a node and each allowed n
 | Java | 21 |
 | NeoForge | Development verification baseline 21.1.234 |
 | Create | 6.0.10, development build 6.0.10-281; install its required dependencies as well |
-| Graph Assembly | 0.1.0 |
+| Graph Assembly | 0.1.1 |
 | KubeJS NeoForge | Development verification baseline `2101.7.2-build.379` |
 | Rhino | Corresponding baseline `2101.2.7-build.81` |
 | KubeJS Create (optional) | `2101.3.1-build.18`; provides `event.recipes.create.*`, not required by the basic examples |
-| JEI (optional) | Graph previews use `19.39.0.368`; the current mod dependency declaration pins this version |
+| JEI (optional) | Graph previews support `19.39.0.368`–`19.70.0.469` (inclusive) |
 
 KubeJS is required for the scripts in this guide; it is not required when authoring graph recipes with datapacks alone. The `GraphAssembly` global object is provided by this mod's KubeJS plugin.
 
