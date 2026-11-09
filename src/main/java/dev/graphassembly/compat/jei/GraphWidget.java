@@ -1,9 +1,15 @@
 package dev.graphassembly.compat.jei;
 
+import dev.graphassembly.recipe.OperationSpec;
+
+import dev.graphassembly.core.definition.basic.Edge;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
+import dev.graphassembly.core.definition.basic.NodeDefinition;
+import dev.graphassembly.core.route.BranchMode;
+
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.logging.LogUtils;
-import com.simibubi.create.content.processing.recipe.ProcessingRecipe;
 import dev.graphassembly.client.StepDescription;
 import dev.graphassembly.client.gui.GraphGuiRenderer;
 import dev.graphassembly.client.gui.GraphGuiPixelBatch;
@@ -12,7 +18,6 @@ import static dev.graphassembly.client.gui.GraphGuiRenderer.color;
 import dev.graphassembly.client.view.*;
 import dev.graphassembly.client.view.GraphProjection.Projected;
 import dev.graphassembly.client.view.NodePresentation.*;
-import dev.graphassembly.core.*;
 import dev.graphassembly.integration.NativeSteps;
 import dev.graphassembly.integration.GraphPreviewRecipes;
 import dev.graphassembly.recipe.GraphIndex;
@@ -33,7 +38,7 @@ import java.util.*;
 
 final class GraphWidget implements IRecipeWidget, IJeiInputHandler {
     private static final Bounds CANVAS = GraphGuiLayout.CANVAS;
-    private final GraphDefinition graph;
+    private final GraphDefinition<OperationSpec> graph;
     private final SettlementGroups settlement;
     private final Map<String, Component> finishSummaries = new HashMap<>();
     private final Map<String, SettlementFinishDetails> finishDetails = new HashMap<>();
@@ -60,7 +65,7 @@ final class GraphWidget implements IRecipeWidget, IJeiInputHandler {
     private boolean draggingNative;
     private Surface pressedPreview;
     private double pressX, pressY;
-    GraphWidget(GraphDefinition graph, IGuiHelper gui, IFocusGroup focuses) {
+    GraphWidget(GraphDefinition<OperationSpec> graph, IGuiHelper gui, IFocusGroup focuses) {
         this.graph = graph; this.gui = gui; this.focuses = focuses;
         this.settlement = SettlementGroups.from(graph);
         for (var finish : settlement.finishes()) {
@@ -77,10 +82,10 @@ final class GraphWidget implements IRecipeWidget, IJeiInputHandler {
                 GraphGuiRenderer.sprite(g, view.sphere ? Sprite.SPHERE : Sprite.PLANE, x, y, 16, 16));
         this.resetViewButton = GraphGuiRenderer.iconButton((int)GraphGuiLayout.RESET_VIEW.left(),
             (int)GraphGuiLayout.RESET_VIEW.top(), com.simibubi.create.foundation.gui.AllIcons.I_REFRESH);
-        this.edgeTopology = GraphEdges.Topology.of(graph.edges());
+        this.edgeTopology = GraphEdges.Topology.of(graph.topology().edges(), graph.layout());
         GraphJeiPlugin.track(this);
     }
-    GraphDefinition definition() { return graph; }
+    GraphDefinition<OperationSpec> definition() { return graph; }
     GraphViewState viewState() { return view; }
     void clearPreviews() { invalidateFrames(); previews.clear(); recipes.clear(); attempted.clear(); diagnosed.clear(); expanded.clear(); surfaces = List.of(); raster.clear(); lastRuntime = null; pressedPreview = null; draggingCanvas = draggingNative = false; gesture.cancel(); PerformanceMetrics.meshRetainedBytes(0); geometryDirty = true; }
     private void invalidateFrames() { for (var surface : surfaces) { var preview = previews.get(surface.id()); if (preview != null) preview.invalidateFrame(); } }
@@ -90,10 +95,10 @@ final class GraphWidget implements IRecipeWidget, IJeiInputHandler {
     private void diagnose(String id, Throwable error) {
         if (diagnosed.add(id)) LogUtils.getLogger().warn("Graph preview unavailable at {} / {}", graph.id(), id, error);
     }
-    private RecipeHolder<?> recipe(Node node) {
+    private RecipeHolder<?> recipe(NodeDefinition<OperationSpec> node) {
         return recipes.computeIfAbsent(node.id(), id -> GraphPreviewRecipes.resolve(Minecraft.getInstance().level, graph, node));
     }
-    private NativeStepPreview preview(Node node, int index, boolean eligible) {
+    private NativeStepPreview preview(NodeDefinition<OperationSpec> node, int index, boolean eligible) {
         if (GraphJeiPlugin.runtime() == null || Minecraft.getInstance().level == null || !Minecraft.getInstance().isRunning()) return null;
         return previews.prepare(node.id(), eligible, () -> {
             if (!attempted.add(node.id())) return null;
@@ -101,9 +106,9 @@ final class GraphWidget implements IRecipeWidget, IJeiInputHandler {
                 var runtime = GraphJeiPlugin.runtime();
                 var nativeRecipe = recipe(node);
                 // A brewing descriptor is a structural node, not a JEI brewing recipe.
-                if (nativeRecipe.value() instanceof dev.graphassembly.integration.brewing.BrewingRecipe) return null;
+                if (nativeRecipe.value() instanceof dev.graphassembly.integration.vanilla.brewing.BrewingRecipe) return null;
                 PerformanceMetrics.previewAttempt();
-                var preview = NativeStepPreview.create(runtime, gui, nativeRecipe, index, focuses, node.completeRecipe());
+                var preview = NativeStepPreview.create(runtime, gui, nativeRecipe, index, focuses, node.operation().completeRecipe());
                 if (preview.isPresent()) { PerformanceMetrics.previewSuccess(); return preview.get(); }
                 else diagnose(node.id(), new IllegalStateException("JEI did not create the native layout"));
             } catch (RuntimeException | LinkageError e) { diagnose(node.id(), e); }
@@ -134,14 +139,14 @@ final class GraphWidget implements IRecipeWidget, IJeiInputHandler {
             // their actual dimensions below still own drawing and mouse hit testing.
             var candidate = new Bounds(p.x() - 256 * scale, p.y() - 256 * scale, p.x() + 256 * scale, p.y() + 256 * scale);
             boolean visible = CANVAS.intersects(candidate);
-            boolean brewing = dev.graphassembly.integration.brewing.BrewingDefinition.SERIALIZER.equals(node.recipe().get("type").getAsString());
+            boolean brewing = dev.graphassembly.integration.vanilla.brewing.BrewingDefinition.SERIALIZER.equals(node.operation().recipe().get("type").getAsString());
             // Structural brewing dots still need their descriptor at the initial, collapsed scale.
             var preview = preview(node, index++, brewing ? front && visible : PreviewLifecycle.shouldPrepare(scale, front, visible));
             try {
                 double w = preview == null ? 49 : preview.layout().getRect().getWidth();
                 double h = preview == null ? 84 : preview.layout().getRect().getHeight();
                 var t = new Transform(p.x() - w * scale / 2, p.y() - h * scale / 2, scale);
-                var surface = NodePresentation.expandedPreview(node.id(), p.depth(), front, t, w, h, node.isCampfire());
+                var surface = NodePresentation.expandedPreview(node.id(), p.depth(), front, t, w, h, node.operation().isCampfire());
                 boolean large = preview != null && NodePresentation.expanded(expanded.getOrDefault(node.id(), false), scale, front, CANVAS.intersects(surface.bounds()));
                 expanded.put(node.id(), large);
                 next.add(large ? surface
@@ -199,10 +204,10 @@ final class GraphWidget implements IRecipeWidget, IJeiInputHandler {
                 @Override public void dot(GraphRasterPlan.DotPixels pixels) {
                     var surface = pixels.surface(); var node = graph.nodes().get(surface.id());
                     batch.submit(pixels.mesh(), color(!surface.front() ? "node.back" : (node.id().equals(view.selected) || node.id().equals(view.selectedFinish)) ? "node.selected"
-                        : node.finish() ? "node.finish" : node.start() ? "node.start" : node.checkpoint() ? "node.checkpoint" : "node.normal"));
+                        : node.roles().finish() ? "node.finish" : node.roles().start() ? "node.start" : node.effects().recordCheckpoint() ? "node.checkpoint" : "node.normal"));
                     var holder = recipes.get(node.id());
                     if (surface.front() && holder != null
-                            && holder.value() instanceof dev.graphassembly.integration.brewing.BrewingRecipe) {
+                            && holder.value() instanceof dev.graphassembly.integration.vanilla.brewing.BrewingRecipe) {
                         batch.flush();
                         var pose = g.pose();
                         var bounds = surface.bounds();
@@ -234,7 +239,7 @@ final class GraphWidget implements IRecipeWidget, IJeiInputHandler {
                         var nativeMouse = NodePresentation.previewMouse(surface, hovered, mx, my);
                         preview.draw(g, nativeMouse.x(), nativeMouse.y());
                         var node = graph.nodes().get(surface.id());
-                        if (node.isCampfire())
+                        if (node.operation().isCampfire())
                             g.renderItem(StepDescription.campfireMachine(node), surface.machineBadgeX(), 0);
                         return true;
                     } catch (RuntimeException | LinkageError e) {
@@ -272,16 +277,16 @@ final class GraphWidget implements IRecipeWidget, IJeiInputHandler {
         String detailsId = view.detailsNode();
         if (detailsId != null) {
             var node = graph.nodes().get(detailsId);
-            if (node.finish()) {
+            if (node.roles().finish()) {
                 var heading = SettlementInfo.text("footer.finish_id", node.id()).copy();
-                if (node.isCampfire()) heading.append(" · ").append(StepDescription.describeCampfire(node));
+                if (node.operation().isCampfire()) heading.append(" · ").append(StepDescription.describeCampfire(node));
                 drawDetail(g, heading, 0, "text.primary");
                 drawFinishSummary(g, node.id());
             } else {
                 drawDetail(g, description(detailsId), 0, "text.primary");
-                if (rows > 1) drawDetail(g, Component.translatable("graph_assembly.node.details", rewards(node),
-                yesNo(checkpoint(node)), Component.translatable(node.route()!=null ? "graph_assembly.branch.routed"
-                    : NextStepPresentation.branchKey(node.branchMode(), graph.outgoing(node.id()).size()))), 1, "text.secondary");
+                if (rows > 1) drawDetail(g, Component.translatable("graph_assembly.node.details", markGrant(node),
+                yesNo(checkpoint(node)), Component.translatable(node.routing().redirect()!=null ? "graph_assembly.branch.routed"
+                    : NextStepPresentation.branchKey(node.routing().branchMode(), graph.topology().outgoing(node.id()).size()))), 1, "text.secondary");
             }
         } else if (view.selectedEdge != null) {
             var lines = font.split(edgeText(view.selectedEdge), (int)(details.right() - details.left()));
@@ -335,11 +340,11 @@ final class GraphWidget implements IRecipeWidget, IJeiInputHandler {
         var slot = previews.get(surface.id()).slotAt(t.localX(x), t.localY(y));
         return slot == null ? null : new RecipeSlotUnderMouse(slot, 0, 0);
     }
-    private static boolean checkpoint(Node node) { return node.start() || node.finish() || node.checkpoint(); }
+    private static boolean checkpoint(NodeDefinition<OperationSpec> node) { return node.roles().start() || node.roles().finish() || node.effects().recordCheckpoint(); }
     private Component description(String id) {
         try {
             var node = graph.nodes().get(id);
-            if (node.isCampfire()) return StepDescription.describeCampfire(node);
+            if (node.operation().isCampfire()) return StepDescription.describeCampfire(node);
             var preview = previews.get(id);
             if (preview != null) return preview.title();
             var value = recipe(graph.nodes().get(id)).value();
@@ -348,10 +353,10 @@ final class GraphWidget implements IRecipeWidget, IJeiInputHandler {
             if (value instanceof com.simibubi.create.content.kinetics.millstone.MillingRecipe milling)
                 return StepDescription.describe(milling);
             if (value instanceof net.minecraft.world.item.crafting.CraftingRecipe
-                || value instanceof dev.graphassembly.integration.anvil.AnvilRecipe
-                || value instanceof dev.graphassembly.integration.brewing.BrewingRecipe)
+                || value instanceof dev.graphassembly.integration.vanilla.anvil.AnvilRecipe
+                || value instanceof dev.graphassembly.integration.vanilla.brewing.BrewingRecipe)
                 return StepDescription.describe(value);
-            return Component.literal(graph.nodes().get(id).recipe().get("type").getAsString());
+            return Component.literal(graph.nodes().get(id).operation().recipe().get("type").getAsString());
         }
         catch (RuntimeException | LinkageError e) { diagnose(id,e); return Component.translatable("graph_assembly.preview.unavailable"); }
     }
@@ -379,7 +384,7 @@ final class GraphWidget implements IRecipeWidget, IJeiInputHandler {
         if (slot != null) {
             slot.slot().getTooltip(tooltip);
             var node = graph.nodes().get(surface.id());
-            if (node.isCampfire()) tooltip.add(StepDescription.describeCampfire(node));
+            if (node.operation().isCampfire()) tooltip.add(StepDescription.describeCampfire(node));
             return;
         }
         if (GraphGuiLayout.DETAILS.contains(mx, my) && view.selectedEdge != null) { tooltip.add(edgeText(view.selectedEdge)); return; }
@@ -387,7 +392,7 @@ final class GraphWidget implements IRecipeWidget, IJeiInputHandler {
         if (id != null) {
             var node = graph.nodes().get(id);
             tooltip.add(description(id));
-            if (node.finish()) {
+            if (node.roles().finish()) {
                 tooltip.add(SettlementInfo.text("footer.finish_id", node.id()));
                 tooltip.add(finishSummary(node.id()));
             }
@@ -403,23 +408,27 @@ final class GraphWidget implements IRecipeWidget, IJeiInputHandler {
                 previews.get(id).getTooltip(tooltip, transform.localX(mx), transform.localY(my));
             }
             if (diagnosed.contains(id)) tooltip.add(Component.translatable("graph_assembly.preview.unavailable"));
-            tooltip.add(Component.translatable("graph_assembly.node.identities", node.id(), yesNo(node.start()), yesNo(node.finish())));
+            tooltip.add(Component.translatable("graph_assembly.node.identities", node.id(), yesNo(node.roles().start()), yesNo(node.roles().finish())));
             dev.graphassembly.client.view.SettlementDescription.inputs(node).forEach(line ->
                 tooltip.add(Component.translatable("graph_assembly.settlement." + line.key(), line.arguments().toArray())));
             dev.graphassembly.client.view.ProgressActionDescription.of(node).forEach(line ->
                 tooltip.add(Component.translatable("graph_assembly.settlement." + line.key(), line.arguments().toArray())));
-            tooltip.add(Component.translatable("graph_assembly.node.rewards", rewards(node), node.rewardLimit() == null
-                ? Component.translatable("graph_assembly.node.unlimited") : node.rewardLimit(), yesNo(checkpoint(node))));
+            tooltip.add(Component.translatable("graph_assembly.node.mark_grant", markGrant(node), node.effects().maxMarkApplications() == null
+                ? Component.translatable("graph_assembly.node.unlimited") : node.effects().maxMarkApplications(), yesNo(checkpoint(node))));
             // Finish settlement summary above and the existing Info view remain authoritative.
             if (dev.graphassembly.client.view.NodePresentation.showStaticCarrier(node)) {
-                var carrier = node.transitionalItem() == null
-                    ? Component.translatable("graph_assembly.node.inherit") : NativeSteps.stack(node.transitionalItem()).getHoverName();
-                if (node.finish()) tooltip.add(Component.translatable("graph_assembly.node.finish",
-                    Component.translatable("graph_assembly.finish." + node.finishMode().name().toLowerCase(Locale.ROOT)), carrier));
+                var carrier = node.effects().carrierOverride() == null
+                    ? Component.translatable("graph_assembly.node.inherit") : NativeSteps.stack(node.effects().carrierOverride()).getHoverName();
+                if (node.roles().finish()) tooltip.add(Component.translatable("graph_assembly.node.finish",
+                    Component.translatable("graph_assembly.finish." + node.settlement().finishMode().name().toLowerCase(Locale.ROOT)), carrier));
                 else tooltip.add(Component.translatable("graph_assembly.node.carrier", carrier));
             }
         } else if (CANVAS.contains(mx, my)) {
-            var edge = picked.edge(); if (edge != null) tooltip.add(edgeText(edge));
+            var edge = picked.edge(); if (edge != null) {
+                tooltip.add(edgeText(edge));
+                dev.graphassembly.client.view.SettlementDescription.edgeConditions(edge).forEach(line->
+                    tooltip.add(Component.translatable("graph_assembly.settlement."+line.key(),line.arguments().toArray())));
+            }
         }
     }
     @Override public boolean handleInput(double mx, double my, IJeiUserInput input) {
@@ -548,17 +557,22 @@ final class GraphWidget implements IRecipeWidget, IJeiInputHandler {
     private static Component yesNo(boolean value) {
         return Component.translatable("graph_assembly.text." + (value ? "yes" : "no"));
     }
-    private static Component rewards(Node node) {
-        return node.rewards().isEmpty() ? Component.translatable("graph_assembly.text.none")
-            : Component.literal(dev.graphassembly.client.view.SettlementDescription.markValues(node.rewards()));
+    private static Component markGrant(NodeDefinition<OperationSpec> node) {
+        return node.effects().markAmounts().isEmpty() ? Component.translatable("graph_assembly.text.none")
+            : Component.literal(dev.graphassembly.client.view.SettlementDescription.markValues(node.effects().markAmounts()));
     }
     private Component edgeText(Edge edge) {
         var node = graph.nodes().get(edge.from());
-        if(node.route()!=null) return Component.translatable("graph_assembly.edge.overridden",edge.from(),edge.to());
-        String key = NextStepPresentation.edgeKey(node.branchMode(), graph.outgoing(node.id()).size());
-        if (node.branchMode() == BranchMode.CHOICE) return Component.translatable(key, edge.from(), edge.to());
-        double scale = graph.edges().stream().filter(e -> e.from().equals(edge.from())).mapToDouble(Edge::weight).max().orElse(1);
-        double sum = graph.edges().stream().filter(e -> e.from().equals(edge.from())).mapToDouble(e -> e.weight() / scale).sum();
+        if(node.routing().redirect()!=null) return Component.translatable("graph_assembly.edge.overridden",edge.from(),edge.to());
+        String key = NextStepPresentation.edgeKey(node.routing().branchMode(), graph.topology().outgoing(node.id()).size());
+        if (node.routing().branchMode() == BranchMode.CHOICE) return Component.translatable(key, edge.from(), edge.to());
+        boolean conditional = graph.topology().outgoing(node.id()).stream().anyMatch(candidate->
+            !candidate.requirements().equals(dev.graphassembly.core.condition.ProgressRequirements.NONE)
+                || graph.nodes().get(candidate.to()).inputs().workpieceInput(0)!=null
+                || !graph.nodes().get(candidate.to()).effects().markAmounts().isEmpty());
+        if(conditional)return Component.translatable("graph_assembly.edge.random.filtered",edge.from(),edge.to(),Double.toString(edge.weight()));
+        double scale = graph.topology().edges().stream().filter(e -> e.from().equals(edge.from())).mapToDouble(Edge::weight).max().orElse(1);
+        double sum = graph.topology().edges().stream().filter(e -> e.from().equals(edge.from())).mapToDouble(e -> e.weight() / scale).sum();
         return Component.translatable(key, edge.from(), edge.to(),
             String.format(Locale.ROOT, "%.2f%%", edge.weight() / scale / sum * 100), Double.toString(edge.weight()));
     }

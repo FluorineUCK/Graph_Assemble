@@ -4,37 +4,37 @@ English | [简体中文](README.zh_cn.md)
 
 <img src="src/main/resources/logo.png" alt="Graph Assembly icon" width="128" height="128">
 
-Graph Assembly adds directed-graph processing recipes for Minecraft 1.21.1, NeoForge 21.1.234, and Create 6.0.10. Graph nodes represent processing steps; workpieces carry progress and are settled when they reach a finish node. Java 21 is required.
+Graph Assembly adds graph-based processing recipes to Create! Give your world some more interesting (or downright bizarre) recipes.
+As with Create's native assembly recipes, workpieces carry their progress and produce the final results when they reach an exit. Graphs give you more freedom to experiment and take your recipe designs further.
 
-Version: **[0.1.1](https://github.com/FluorineUCK/Graph_Assemble/releases/tag/v0.1.1)**.
+Version: **[0.1.2](https://github.com/FluorineUCK/Graph_Assemble/releases/tag/v0.1.2)**.
 
-## Supported features
+## What can you do?
 
-- Choice branches, random branches, and loops; finish outputs and scrap pools can depend on marks, ordered checkpoints, and visit counts.
-- Primary and auxiliary workpieces are validated separately; merged outputs inherit the primary workpiece's progress. Successful processing can clear marks or checkpoints and specify the next step.
-- Seven Create processing types: pressing, cutting, deploying, filling, milling, mixing, and compacting.
-- Standard shaped and shapeless graph crafting in inventories, crafting tables, and the vanilla Crafter; supports dyeing and repairing recipes while preserving native results. The Crafter processes one batch per redstone rising edge.
-- The vanilla brewing stand supports two primary-workpiece modes: bottles as primary workpieces retain their individual progress; with the ingredient as the primary workpiece, only one ingredient is consumed and its graph progress is distributed to every bottle, which then advances and settles independently.
-- Standard graph processing for vanilla furnaces, smokers, blast furnaces, campfires, soul campfires, stonecutters, smithing tables, and anvils. Campfire slots are timed independently; anvils support repair, enchantment enhancement, explicit renaming, and valid combinations.
-- Vanilla recipes can run graph steps on corresponding Create replacement machines, including Basins, Mechanical Saws, Mechanical Crafters, and fan-assisted smoking/smelting.
-- KubeJS recipe authors can use `node(id, KubeRecipe)` to use a native recipe as a node, or `nativeNode()` to provide recipe JSON. Ingredient inputs support item/material shorthand.
-- Graph progress and settled outputs are items; fluids are only used for native auxiliary consumption in adapted steps. KubeJS and JEI are optional.
-- Each filter supports up to 256 unique targets. See the [Player Guide](docs/guide/player.md).
+- Choice branches, random branches, conditional routes, and loops: plenty of room for creativity (or cruelty).
+- Combine workpieces: multiple workpieces from the same graph can take part in a processing step. Their progress is checked separately, but the output inherits only the primary workpiece's progress. Auxiliary marks and history aren't added to it.
+- Clearable marks and checkpoints: a new mechanic! Change an item's marks to get different outputs or send it through different steps. You can clear them again, too.
+- Create processing support: pressing, cutting, deploying, filling, milling, mixing, compacting, crushing, sandpaper_polishing, splashing, haunting, and emptying.
+- Vanilla machines too? Your inventory, crafting tables, and the vanilla Crafter support shaped and shapeless graph recipes, including dyeing and repair recipes.
+  Brewing stands support two primary-workpiece modes. When bottles are the primary workpieces, each keeps its own progress. When the ingredient is the primary workpiece, only one ingredient is consumed. Each bottle starts from that same progress, then advances and produces its results independently, so random outcomes may differ.
+  Vanilla furnaces, smokers, blast furnaces, campfires, soul campfires, stonecutters, smithing tables, and anvils also support standard graph processing. Anvils support repairs, enchantment upgrades, renaming, and valid combinations of those operations.
+- Tired of doing everything by hand? Run vanilla recipe steps on their Create machine counterparts, including Basins, Mechanical Saws, Mechanical Crafters, and fan-assisted smoking or smelting.
+- KubeJS-friendly: use `node(id, KubeRecipe)` to turn a native recipe into a node, or supply recipe JSON with `nativeNode()`.
+- Prefer Create's native sequenced assembly? You can register supported processing steps as real Create sequenced assemblies. (If a design issue is making graph recipes a pain to write, please tell me :-( )
 
-Addon custom machines do not automatically support graph recipe execution. See the full [Compatibility Reference](docs/reference/compatibility.md).
+Custom machines from Create addons or other mods generally need their own integration to execute graph recipes. Maybe you'd like to add one? PRs are welcome! See the [Compatibility Reference](docs/reference/compatibility.md) for the full scope.
 
-## Installation
+## Getting started
 
 Install this mod, Create, and their dependencies on both client and server. Requirements: Minecraft 1.21.1, NeoForge 21.1.234 or later in the 21.1 line, and Create 6.0.10. JEI 19.39.0.368–19.70.0.469 and KubeJS NeoForge 2101.7.2-build.379 are optional dependencies.
 
-## Documentation
+## Documentation and guides
 
 - Players: [Player Guide](docs/guide/player.md)
 - Recipe authors: [KubeJS Guide](docs/guide/kubejs.md), [Recipe Format Reference](docs/reference/recipe-format.md)
 - Resource-pack authors: [Resource Pack Replacement Guide](docs/guide/resource-packs.md), [Atlas Coordinates](docs/reference/art/atlas.md)
 - [Documentation Index](docs/README.md)
 - [Contributing Guide](CONTRIBUTING.md)
-- [Examples Index](examples/README.md)
 
 ## Build
 

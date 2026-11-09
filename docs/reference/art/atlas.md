@@ -2,7 +2,7 @@
 
 English | [简体中文](atlas.zh_cn.md)
 
-The current GUI UV contract is defined by `GraphGuiAssets.java`. Coordinates use a top-left origin and 1× logical pixels. The atlas is 1024×512 RGBA and supports integer-scale high-resolution variants.
+`GraphGuiAssets.java` defines the GUI atlas regions. Coordinates start at the top left and use logical pixels at 1× scale. The atlas is 1024×512 RGBA and supports high-resolution versions scaled by an integer factor.
 
 ## Current Atlas Regions
 

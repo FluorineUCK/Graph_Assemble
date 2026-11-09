@@ -1,7 +1,7 @@
 package dev.graphassembly.compat.jei;
 
 import dev.graphassembly.client.view.SettlementGroups;
-import dev.graphassembly.core.IntRange;
+import dev.graphassembly.core.condition.IntRange;
 import java.util.ArrayList;
 import java.util.TreeMap;
 
@@ -12,9 +12,9 @@ record SettlementFinishDetails(int rules, String ranges, boolean moreConditions)
         var rule = finish.rules().getFirst().condition();
         var conditions = rule.requirements();
         var parts = new ArrayList<String>();
-        new TreeMap<>(conditions.markRanges()).forEach((id, range) -> parts.add(id + " " + range(range)));
-        new TreeMap<>(conditions.checkpointCounts()).forEach((id, range) -> parts.add(id + " ×" + range(range)));
-        boolean more = parts.size() > 2 || rule.start() != null || conditions.marks() != null || conditions.checkpoints() != null;
+        new TreeMap<>(conditions.marks().ranges()).forEach((id, range) -> parts.add(id + " " + range(range)));
+        new TreeMap<>(conditions.checkpoints().counts()).forEach((id, range) -> parts.add(id + " ×" + range(range)));
+        boolean more = parts.size() > 2 || rule.start() != null || conditions.marks().match() != null || conditions.checkpoints().match() != null;
         return new SettlementFinishDetails(1, String.join("; ", parts.subList(0, Math.min(2, parts.size()))), more);
     }
     private static String range(IntRange range) {

@@ -1,6 +1,6 @@
 package dev.graphassembly.client.view;
 
-import dev.graphassembly.core.GraphDefinition;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
 import java.util.*;
 
 /** Layout and camera math without client or JEI linkage, independently testable. */
@@ -16,11 +16,12 @@ public final class GraphProjection {
         double perspective = 3 / (3 - depth);
         return new Projected(cx + x * radius * perspective, cy + y * radius * perspective, depth);
     }
-    public static Map<String, Point> layout(GraphDefinition graph, boolean sphere) {
+    public static Map<String, Point> layout(GraphDefinition<?> graph, boolean sphere) {
         Map<String, Point> result = new LinkedHashMap<>();
         int i = 0, count = graph.nodes().size();
         for (var node : graph.nodes().values()) {
-            var override = sphere ? node.spherePosition() : node.position();
+            var layout = graph.layout().node(node.id());
+            var override = sphere ? layout.spherePosition() : layout.position();
             Point point;
             if (!override.isEmpty()) {
                 double x = override.get(0), y = override.get(1), z = sphere ? override.get(2) : 0;

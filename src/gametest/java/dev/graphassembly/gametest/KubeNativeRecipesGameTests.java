@@ -1,5 +1,7 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.recipe.RecipeMode;
+
 import dev.graphassembly.integration.NativeSteps;
 import dev.graphassembly.recipe.GraphIndex;
 import net.minecraft.gametest.framework.GameTest;
@@ -22,7 +24,7 @@ public final class KubeNativeRecipesGameTests {
         var recipe = (AbstractCookingRecipe) NativeSteps.template(level, graph, graph.nodes().get("heat"), new ItemStack(Items.COPPER_INGOT));
         helper.assertTrue(recipe.getCookingTime() == 60 && Math.abs(recipe.getExperience() - 0.7F) < 0.001F,
             "Upstream cookingTime/xp must survive");
-        helper.assertTrue(graph.outputs().getFirst().results().getFirst().count() == 2, "Output count sugar must survive");
+        helper.assertTrue(graph.outputRules().getFirst().leaves().getFirst().count() == 2, "Output count sugar must survive");
         helper.assertTrue(level.getRecipeManager().byKey(ResourceLocation.parse("test:graph_nested_heat")).isEmpty(),
             "Embedded recipe must not be independently registered");
         helper.succeed();
@@ -34,20 +36,20 @@ public final class KubeNativeRecipesGameTests {
         for (var id : java.util.List.of("snapshot", "reuse", "shaped", "shapeless", "stonecutting", "campfire", "smithing", "trim", "raw", "checked")) {
             var graph = index.graphs().get("test:kube_native_" + id);
             helper.assertTrue(graph != null, "Missing/disabled sugar graph " + id + ": " + index.disabledReasons());
-            helper.assertTrue(graph.nodes().get("s").nativeRecipe(), "KJS recipe is explicitly complete");
+            helper.assertTrue((graph.nodes().get("s").operation().recipeMode() == RecipeMode.NATIVE), "KJS recipe is explicitly complete");
         }
-        var before = index.graphs().get("test:kube_native_snapshot").nodes().get("s").recipe();
-        var after = index.graphs().get("test:kube_native_reuse").nodes().get("s").recipe();
+        var before = index.graphs().get("test:kube_native_snapshot").nodes().get("s").operation().recipe();
+        var after = index.graphs().get("test:kube_native_reuse").nodes().get("s").operation().recipe();
         helper.assertTrue(before.get("cookingtime").getAsInt() == 31 && after.get("cookingtime").getAsInt() == 99,
             "Reused recipe snapshots each capture their own settings");
         for (var id : java.util.List.of("shaped", "shapeless"))
-            helper.assertTrue(index.graphs().get("test:kube_native_"+id).nodes().get("s").recipe().get("type").getAsString().equals("minecraft:crafting_"+id),
+            helper.assertTrue(index.graphs().get("test:kube_native_"+id).nodes().get("s").operation().recipe().get("type").getAsString().equals("minecraft:crafting_"+id),
                 "Normal upstream crafting selects its final vanilla serializer");
-        var output = index.graphs().get("test:kube_native_snapshot").outputs().getFirst().results().getFirst();
+        var output = index.graphs().get("test:kube_native_snapshot").outputRules().getFirst().leaves().getFirst();
         helper.assertTrue(NativeSteps.output(helper.getLevel(), output).getDamageValue() == 5, "Item.of component survives graph output");
         var rawNode = index.graphs().get("test:kube_native_raw").nodes().get("s");
-        helper.assertTrue(rawNode.outputs().getFirst().results().getFirst().count() == 2 && rawNode.scrap().getFirst().item().equals("minecraft:flint"),
-            "Node output and scrap also accept typed/count sugar");
+        helper.assertTrue(rawNode.settlement().outputRules().getFirst().leaves().getFirst().count() == 2 && rawNode.settlement().scrapLeaves().getFirst().item().equals("minecraft:flint"),
+            "NodeDefinition output and scrap also accept typed/count sugar");
         helper.assertTrue(helper.getLevel().getRecipeManager().getRecipes().stream().noneMatch(r -> r.id().getPath().startsWith("graph_nested_")),
             "No graph-only native recipes leak into the recipe manager");
         helper.assertTrue(helper.getLevel().getRecipeManager().byKey(ResourceLocation.parse("minecraft:iron_ingot_from_smelting_raw_iron")).isPresent(),
@@ -88,7 +90,7 @@ public final class KubeNativeRecipesGameTests {
             try {
                 helper.assertTrue(level.getRecipeManager().byKey(id).orElseThrow().value() != before, "Reload must replace graph snapshot");
                 var graph = GraphIndex.get(level).graphs().get(id.toString());
-                helper.assertTrue(graph != null && graph.nodes().get("heat").nativeRecipe(), "Reload rebuilds executable native nodes");
+                helper.assertTrue(graph != null && (graph.nodes().get("heat").operation().recipeMode() == RecipeMode.NATIVE), "Reload rebuilds executable native nodes");
                 helper.assertTrue(level.getRecipeManager().getRecipes().stream().noneMatch(r -> r.id().getPath().startsWith("graph_nested_")),
                     "Reload must not leak embedded native recipes");
                 helper.succeed();

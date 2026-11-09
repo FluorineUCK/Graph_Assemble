@@ -28,7 +28,7 @@ public abstract class SpoutMixin {
     @Inject(method = "fillItem", at = @At("HEAD"), cancellable = true)
     private static void graphAssembly$fill(Level level, int amount, ItemStack input, FluidStack available, CallbackInfoReturnable<ItemStack> cir) {
         var lookup = GraphRuntime.lookup(level, input, AllRecipeTypes.FILLING.getType(), FillingRecipe.class,
-            r -> r.value().getRequiredFluid().test(available));
+            r -> r.value().getRequiredFluid().test(available) && r.value().getRequiredFluid().amount() == amount);
         if (!lookup.handled()) return;
         var recipe = lookup.first();
         if (recipe.isEmpty() || recipe.get().value().getRequiredFluid().amount() != amount) { cir.setReturnValue(ItemStack.EMPTY); return; }

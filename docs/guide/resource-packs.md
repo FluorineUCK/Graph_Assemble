@@ -34,7 +34,7 @@ The root `pack.mcmeta` describes the Minecraft resource pack:
 {"pack":{"pack_format":34,"description":"Graph Assembly PNG atlas"}}
 ```
 
-The filter item model uses the Minecraft-standard configuration `graph_filter_appearance.json`, whose `layer0` points to `graph_assembly:item/graph_filter`; the model configuration supplies the reference, while the PNG supplies the item texture.
+The filter item model is defined in the Minecraft-standard `graph_filter_appearance.json`. Its `layer0` references `graph_assembly:item/graph_filter`, so the model file selects the texture and the PNG provides its appearance.
 
 The right side of the filter screen displays the actual item stack being edited, rendered with Create's native `GuiGameElement`. Replacing the item PNG therefore updates the held item, inventory icon, and right-side preview together. For a three-dimensional appearance, use a reference to a Minecraft-standard item model; do not draw a fixed preview PNG.
 
@@ -46,9 +46,9 @@ In the resource-pack screen, place the art pack **above Mod Resources**. The GUI
 
 `canvas_background.png` is a separate **16×16 PNG**. It can be replaced with an integer-scale square such as 32×32 or 48×48; its display period remains 16 logical pixels and changes with canvas zoom. Keep all four edges seamless.
 
-In planar mode, the background and nodes share the pan and zoom origin; the frame, buttons, and footer do not move. In spherical mode, only the background scales—sphere rotation is not simulated as panning. Settlement information is on JEI's native Info page; there is no separate settlement canvas. If the background is missing or has an invalid size, the original panel fill is retained.
+In planar mode, the background and nodes share the pan and zoom origin; the frame, buttons, and footer stay in place. In spherical mode, the background scales with zoom but does not pan as the sphere rotates. Settlement information is on JEI's native Info page, with no separate settlement canvas. If the background is missing or has an invalid size, the original panel fill remains.
 
-Background tiling and pixel-center sampling are handled by a shader registered in Java; dynamic overlay opacity is centralized in `GuiColors` under `canvas.background`.
+A shader registered in Java handles background tiling and pixel-center sampling. The dynamic overlay opacity is set in `GuiColors` under `canvas.background`.
 
 See [asset sources](../reference/art/sources.md) for background references and license records. The current background PNG is a derivative of that reference.
 

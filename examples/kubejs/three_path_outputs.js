@@ -15,15 +15,15 @@ ServerEvents.recipes(function (event) {
                 "recipe": {"type": "create:pressing"}
             },
             {
-                "id": "cut", "checkpoint": true, "rewards": {"quality": 1},
+                "id": "cut", "checkpoint": true, "mark_amounts": {"quality": 1},
                 "recipe": {"type": "create:cutting", "processing_time": 40}
             },
             {
-                "id": "wire", "checkpoint": true, "rewards": {"quality": 1},
+                "id": "wire", "checkpoint": true, "mark_amounts": {"quality": 1},
                 "recipe": {"type": "create:deploying", "ingredients": [{"item": "minecraft:redstone"}]}
             },
             {
-                "id": "fill", "checkpoint": true, "rewards": {"quality": 1},
+                "id": "fill", "checkpoint": true, "mark_amounts": {"quality": 1},
                 "recipe": {
                     "type": "create:filling",
                     "ingredients": [{"type": "neoforge:single", "fluid": "minecraft:water", "amount": 250}]

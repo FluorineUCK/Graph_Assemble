@@ -5,6 +5,7 @@ import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
 import com.simibubi.create.content.kinetics.deployer.BeltDeployerCallbacks;
 import com.simibubi.create.content.kinetics.deployer.DeployerBlockEntity;
 import dev.graphassembly.integration.GraphOperation;
+import dev.graphassembly.integration.sequence.NativeSequences;
 import dev.graphassembly.recipe.Workpiece;
 import net.minecraft.world.item.crafting.Recipe;
 import org.spongepowered.asm.mixin.Mixin;
@@ -22,6 +23,7 @@ public abstract class DeployerActivationMixin {
         var held = player.getMainHandItem();
         var operation = GraphOperation.get(recipe);
         if (operation != null ? !operation.matchesHeld(deployer.getLevel(), input.stack, held)
-            : Workpiece.has(input.stack) || Workpiece.has(held)) ci.cancel();
+            : Workpiece.has(input.stack) || NativeSequences.tracked(held)
+                || !NativeSequences.allowsUpstreamActivation(deployer.getLevel(),input.stack,recipe)) ci.cancel();
     }
 }

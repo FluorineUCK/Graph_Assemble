@@ -1,10 +1,15 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.condition.mark.MarkAccounting;
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.progress.Progress;
+import dev.graphassembly.core.progress.TransitionResult;
+import dev.graphassembly.core.route.RouteState;
+
 import com.google.gson.*;
 import com.mojang.serialization.JsonOps;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.GraphEngine;
-import dev.graphassembly.integration.anvil.AnvilRecipe;
+import dev.graphassembly.integration.vanilla.anvil.AnvilRecipe;
 import dev.graphassembly.recipe.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
@@ -108,7 +113,7 @@ public final class NativeAnvilContractsGameTests {
             } finally {AnvilEntranceIngredientFixture.query=()->{};}
             s.click(ClickType.PICKUP,0);
             var result=Workpiece.read(h.getLevel(),s.menu.getCarried());
-            check(result!=null&&result.history().equals(List.of("repair"))&&s.player.experienceLevel<30,
+            check(result!=null&&result.recentHistory().equals(List.of("repair"))&&s.player.experienceLevel<30,
                 "The next independent click can use the newly installed graph");
         }
         h.succeed();
@@ -146,24 +151,24 @@ public final class NativeAnvilContractsGameTests {
     public static void markedAnvilRolesValidateIndependentlyAndOnlyPhysicalLeftHistorySurvives(GameTestHelper h) {
         var data=JsonParser.parseString("""
             {"ingredient":{"item":"minecraft:iron_sword"},"transitional_item":"minecraft:iron_nugget",
-             "nodes":[{"id":"left","start":true,"transitional_item":"minecraft:iron_sword","rewards":{"quality":3},"recipe":{"type":"create:pressing"}},
-              {"id":"right","start":true,"ingredient":{"item":"minecraft:quartz"},"transitional_item":"minecraft:iron_sword","rewards":{"quality":99},"recipe":{"type":"create:cutting"}},
+             "nodes":[{"id":"left","start":true,"transitional_item":"minecraft:iron_sword","mark_amounts":{"quality":3},"recipe":{"type":"create:pressing"}},
+              {"id":"right","start":true,"ingredient":{"item":"minecraft:quartz"},"transitional_item":"minecraft:iron_sword","mark_amounts":{"quality":99},"recipe":{"type":"create:cutting"}},
               {"id":"repair","workpiece_inputs":[{"item_input":0,"current_nodes":["left","right"]},{"item_input":1,"current_nodes":["left","right"]}],"recipe":{"type":"graph_assembly:anvil","action":"repair"}},
               {"id":"finish","finish":true,"recipe":{"type":"create:pressing"}}],
              "edges":[{"from":"left","to":"repair"},{"from":"right","to":"repair"},{"from":"repair","to":"finish"}],"outputs":[{"results":[{"item":"minecraft:diamond"}]}]}
             """).getAsJsonObject();var graph=new GraphRecipe(data);var definition=graph.definition(ID.toString());
-        var left=Workpiece.write(sword(),GraphEngine.complete(definition,null,"left","minecraft:iron_sword",()->0).state());
-        var right=Workpiece.write(sword(),GraphEngine.complete(definition,null,"right","minecraft:quartz",()->0).state());
+        var left=Workpiece.write(sword(),((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(definition, null, "left", "minecraft:iron_sword"), ()->0)).progress());
+        var right=Workpiece.write(sword(),((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(definition, null, "right", "minecraft:quartz"), ()->0)).progress());
         for(boolean reversed:List.of(false,true))try(var s=new Session(h,graph)) {
             var first=reversed?right:left;var second=reversed?left:right;s.menu.getSlot(0).set(first.copy());s.menu.getSlot(1).set(second.copy());s.click(ClickType.PICKUP,0);
             var progress=Workpiece.read(h.getLevel(),s.menu.getCarried());var inherited=Workpiece.read(h.getLevel(),first);
-            check(progress!=null&&progress.current().equals("repair")&&progress.history().equals(List.of(reversed?"right":"left","repair"))&&progress.marks().equals(inherited.marks())
+            check(progress!=null&&progress.current().equals("repair")&&progress.recentHistory().equals(List.of(reversed?"right":"left","repair"))&&progress.marks().values().equals(inherited.marks().values())
                 &&progress.checkpoints().equals(inherited.checkpoints())&&s.menu.getSlot(0).getItem().isEmpty()&&s.menu.getSlot(1).getItem().isEmpty(),"Physical left, not a preferred graph mark or swapped auxiliary, owns anvil history");
         }
         for(String bad:List.of("raw","foreign","wrong-current","tracked-multiple"))try(var s=new Session(h,graph)) {
             var extra=right.copy();if(bad.equals("raw"))extra.remove(GraphAssembly.PROGRESS.get());
             if(bad.equals("foreign"))extra.set(GraphAssembly.PROGRESS.get(),extra.get(GraphAssembly.PROGRESS.get()).replace(ID.toString(),"test:foreign"));
-            if(bad.equals("wrong-current"))extra=Workpiece.write(sword(),new dev.graphassembly.core.Progress(ID.toString(),"right","finish",Map.of(),List.of(),Map.of(),null,List.of("right","finish")));
+            if(bad.equals("wrong-current"))extra=Workpiece.write(sword(),new Progress(ID.toString(), "right", "finish", new MarkAccounting.State(Map.of(), Map.of()), List.of(), new RouteState(null, null), List.of("right","finish")));
             if(bad.equals("tracked-multiple"))extra=right.copyWithCount(2);
             s.menu.getSlot(0).set(left.copy());s.menu.getSlot(1).set(extra);
             // SimpleContainer.setItem clamps unstackable inputs. Exercise the defensive contract

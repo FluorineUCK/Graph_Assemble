@@ -1,6 +1,6 @@
 package dev.graphassembly.client.view;
 
-import dev.graphassembly.core.BranchMode;
+import dev.graphassembly.core.route.BranchMode;
 
 /** Presentation only; graph branching and persisted random locks remain engine-owned. */
 public final class NextStepPresentation {

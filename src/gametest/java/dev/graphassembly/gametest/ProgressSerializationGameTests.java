@@ -1,7 +1,11 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.codec.ProgressCodec;
+import dev.graphassembly.core.condition.mark.MarkAccounting;
+import dev.graphassembly.core.progress.Progress;
+import dev.graphassembly.core.route.RouteState;
+
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.Progress;
 import dev.graphassembly.recipe.ProgressStringCodec;
 import dev.graphassembly.recipe.Workpiece;
 import io.netty.buffer.ByteBuf;
@@ -39,11 +43,10 @@ public final class ProgressSerializationGameTests {
     public static void fullLargeHistorySurvivesBinaryNbtAndNetwork(GameTestHelper helper) throws IOException {
         var checkpoints = new ArrayList<String>();
         for (int visit = 0; visit < 12_000; visit++) checkpoints.add("loop_检查点_🧭_" + visit % 17);
-        var progress = new Progress("test:large_progress", "start", "loop", Map.of("worked", 12_000),
-            checkpoints, Map.of("loop", 12_000), "finish", List.of("loop", "loop", "loop"));
+        var progress = new Progress("test:large_progress", "start", "loop", new MarkAccounting.State(Map.of("worked", 12_000), Map.of("loop", 12_000)), checkpoints, new RouteState("finish", null), List.of("loop", "loop", "loop"));
         var original = Workpiece.write(new ItemStack(Items.IRON_NUGGET), progress);
         String json = original.get(GraphAssembly.PROGRESS.get());
-        check(progress.toJson().toString().equals(json), "Current structured and stream encodings must use the same progress JSON");
+        check(ProgressCodec.toJson(progress).toString().equals(json), "Current structured and stream encodings must use the same progress JSON");
         check(json.getBytes(StandardCharsets.UTF_8).length > 100 * 1024, "Fixture must exceed 100 KiB of progress");
         check(json.length() > 32_767, "Fixture must exceed the former network string limit");
 

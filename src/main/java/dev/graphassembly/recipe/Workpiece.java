@@ -1,8 +1,10 @@
 package dev.graphassembly.recipe;
 
+import dev.graphassembly.codec.ProgressCodec;
+import dev.graphassembly.core.progress.Progress;
+
 import com.google.gson.JsonParser;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.Progress;
 import dev.graphassembly.diagnostics.PerformanceMetrics;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.ItemStack;
@@ -15,7 +17,7 @@ public final class Workpiece {
         String json = stack.get(GraphAssembly.PROGRESS.get());
         if (json == null) return null;
         PerformanceMetrics.workpieceParse();
-        return Progress.fromJson(JsonParser.parseString(json).getAsJsonObject());
+        return ProgressCodec.fromJson(JsonParser.parseString(json).getAsJsonObject());
     }
     /** Level-scoped snapshots parse current progress; without a level, read the current format without caching. */
     public static Progress read(Level level, ItemStack stack) {
@@ -26,7 +28,7 @@ public final class Workpiece {
     public static ItemStack write(ItemStack stack, Progress progress) {
         ItemStack result = stack.copyWithCount(1);
         result.set(DataComponents.MAX_STACK_SIZE, 1);
-        result.set(GraphAssembly.PROGRESS.get(), progress.toJsonString());
+        result.set(GraphAssembly.PROGRESS.get(), ProgressCodec.toJsonString(progress));
         return result;
     }
 }

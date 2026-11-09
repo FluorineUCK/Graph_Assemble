@@ -1,8 +1,10 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.progress.TransitionResult;
+
 import com.google.gson.*;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.GraphEngine;
 import dev.graphassembly.recipe.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
@@ -72,8 +74,8 @@ public final class NativeSmithingContractsGameTests {
         recipe.add(auxiliary==1?"template":"addition",JsonParser.parseString("{\"item\":\"minecraft:iron_nugget\"}"));
         return new GraphRecipe(JsonParser.parseString("""
             {"ingredient":{"item":"minecraft:amethyst_shard"},"transitional_item":"minecraft:iron_nugget",
-             "nodes":[{"id":"body","start":true,"rewards":{"quality":3},"recipe":{"type":"create:pressing"}},
-              {"id":"insert","start":true,"ingredient":{"item":"minecraft:quartz"},"checkpoint":true,"rewards":{"quality":99},"recipe":{"type":"create:cutting"}},
+             "nodes":[{"id":"body","start":true,"mark_amounts":{"quality":3},"recipe":{"type":"create:pressing"}},
+              {"id":"insert","start":true,"ingredient":{"item":"minecraft:quartz"},"checkpoint":true,"mark_amounts":{"quality":99},"recipe":{"type":"create:cutting"}},
               {"id":"join","recipe":%s,"workpiece_inputs":[{"item_input":0,"current_nodes":["body"]},{"item_input":%s,"current_nodes":["insert"],"requirements":{"mark_ranges":{"quality":{"min":90}}}}]},
               {"id":"f","finish":true,"recipe":{"type":"create:pressing"}}],
              "edges":[{"from":"body","to":"join"},{"from":"insert","to":"join"},{"from":"join","to":"f"}],"outputs":[{"results":[{"item":"minecraft:diamond"}]}]}
@@ -83,12 +85,12 @@ public final class NativeSmithingContractsGameTests {
     public static void templateAndAdditionWorkpieceRolesUseBaseHistoryAndRejectBadAuxiliaries(GameTestHelper helper) {
         for(int logical:List.of(1,2)) {
             var graph=joined(logical);var definition=graph.definition(ID.toString());int physical=logical==1?0:2;
-            var main=Workpiece.write(new ItemStack(Items.IRON_NUGGET),GraphEngine.complete(definition,null,"body","minecraft:amethyst_shard",()->0).state());
-            var auxiliary=Workpiece.write(new ItemStack(Items.IRON_NUGGET),GraphEngine.complete(definition,null,"insert","minecraft:quartz",()->0).state());
+            var main=Workpiece.write(new ItemStack(Items.IRON_NUGGET),((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(definition, null, "body", "minecraft:amethyst_shard"), ()->0)).progress());
+            var auxiliary=Workpiece.write(new ItemStack(Items.IRON_NUGGET),((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(definition, null, "insert", "minecraft:quartz"), ()->0)).progress());
             try(var s=new Session(helper,holder(graph))) {
                 s.fill(1);s.menu.getSlot(1).set(main.copy());s.menu.getSlot(physical).set(auxiliary.copy());
                 s.click(ClickType.PICKUP,0);var progress=Workpiece.read(helper.getLevel(),s.menu.getCarried());
-                check(progress!=null&&progress.current().equals("join")&&progress.marks().get("quality")==3&&progress.history().equals(List.of("body","join"))&&!progress.checkpoints().contains("insert"),"Logical base0 (physical1) alone owns history/marks; auxiliary role"+logical+" is consumed, not merged");
+                check(progress!=null&&progress.current().equals("join")&&progress.marks().values().get("quality")==3&&progress.recentHistory().equals(List.of("body","join"))&&!progress.checkpoints().contains("insert"),"Logical base0 (physical1) alone owns history/marks; auxiliary role"+logical+" is consumed, not merged");
                 check(s.counts(0),"Both declared workpieces and remaining raw role are consumed once");
                 for(String invalid:List.of("raw","wrong-route","wrong-graph","malformed","wrong-item")) {
                     s.reset();s.fill(1);s.menu.getSlot(1).set(main.copy());var bad=auxiliary.copy();

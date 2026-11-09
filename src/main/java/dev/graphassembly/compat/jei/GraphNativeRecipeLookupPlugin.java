@@ -1,7 +1,9 @@
 package dev.graphassembly.compat.jei;
 
+import dev.graphassembly.recipe.OperationSpec;
+
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.GraphDefinition;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
 import dev.graphassembly.integration.GraphPreviewRecipes;
 import dev.graphassembly.integration.NativeSteps;
 import java.util.ArrayList;
@@ -26,10 +28,10 @@ import net.minecraft.world.level.Level;
 
 /** Adds native node ingredients to graph lookup without changing execution capabilities. */
 public final class GraphNativeRecipeLookupPlugin implements IRecipeManagerPlugin {
-    private final Map<GraphDefinition, Map<RecipeIngredientRole, Set<IngredientKey>>> ingredients = new IdentityHashMap<>();
+    private final Map<GraphDefinition<OperationSpec>, Map<RecipeIngredientRole, Set<IngredientKey>>> ingredients = new IdentityHashMap<>();
     private IJeiRuntime cachedRuntime;
     private Level cachedLevel;
-    private List<GraphDefinition> graphs = List.of();
+    private List<GraphDefinition<OperationSpec>> graphs = List.of();
 
     @Override public <V> List<RecipeType<?>> getRecipeTypes(IFocus<V> focus) {
         return matchingGraphs(focus).isEmpty() ? List.of() : List.of(GraphJeiPlugin.TYPE);
@@ -37,7 +39,7 @@ public final class GraphNativeRecipeLookupPlugin implements IRecipeManagerPlugin
 
     @Override public <T, V> List<T> getRecipes(IRecipeCategory<T> category, IFocus<V> focus) {
         if (!category.getRecipeType().equals(GraphJeiPlugin.TYPE)) return List.of();
-        return matchingGraphs(focus).stream().<T>map(category.getRecipeType().getRecipeClass()::cast).toList();
+        return matchingGraphs(focus).stream().map(GraphCategory.Display::new).<T>map(category.getRecipeType().getRecipeClass()::cast).toList();
     }
 
     @Override public <T> List<T> getRecipes(IRecipeCategory<T> category) {
@@ -52,7 +54,7 @@ public final class GraphNativeRecipeLookupPlugin implements IRecipeManagerPlugin
         cachedLevel = null;
     }
 
-    private <V> List<GraphDefinition> matchingGraphs(IFocus<V> focus) {
+    private <V> List<GraphDefinition<OperationSpec>> matchingGraphs(IFocus<V> focus) {
         IJeiRuntime runtime = GraphJeiPlugin.runtime();
         Level level = Minecraft.getInstance().level;
         if (runtime == null || level == null) {
@@ -68,8 +70,8 @@ public final class GraphNativeRecipeLookupPlugin implements IRecipeManagerPlugin
         RecipeIngredientRole role = lookupRole(focus.getRole());
         if (role == RecipeIngredientRole.RENDER_ONLY) return List.of();
         IngredientKey key = key(runtime, focus.getTypedValue());
-        List<GraphDefinition> matches = new ArrayList<>();
-        for (GraphDefinition graph : graphs) {
+        List<GraphDefinition<OperationSpec>> matches = new ArrayList<>();
+        for (GraphDefinition<OperationSpec> graph : graphs) {
             var index = ingredients.computeIfAbsent(graph, value -> collect(runtime, level, value));
             if (index.getOrDefault(role, Set.of()).contains(key)) matches.add(graph);
         }
@@ -77,12 +79,12 @@ public final class GraphNativeRecipeLookupPlugin implements IRecipeManagerPlugin
     }
 
     private static Map<RecipeIngredientRole, Set<IngredientKey>> collect(IJeiRuntime runtime, Level level,
-            GraphDefinition graph) {
+            GraphDefinition<OperationSpec> graph) {
         Map<RecipeIngredientRole, Set<IngredientKey>> result = new EnumMap<>(RecipeIngredientRole.class);
         for (var node : graph.nodes().values()) {
             try {
                 var holder = GraphPreviewRecipes.resolve(level, graph, node);
-                if (holder.value() instanceof dev.graphassembly.integration.brewing.BrewingRecipe brewing) {
+                if (holder.value() instanceof dev.graphassembly.integration.vanilla.brewing.BrewingRecipe brewing) {
                     var keys = result.computeIfAbsent(RecipeIngredientRole.INPUT, ignored -> new HashSet<>());
                     for (var stack : brewing.previewAddition())
                         runtime.getIngredientManager().createTypedIngredient(VanillaTypes.ITEM_STACK, stack)
@@ -91,7 +93,7 @@ public final class GraphNativeRecipeLookupPlugin implements IRecipeManagerPlugin
                 }
                 var supplier = NativeRecipeCategoryPreview.ingredients(runtime, holder);
                 if (supplier.isEmpty()) continue;
-                boolean completeRecipe = node.completeRecipe();
+                boolean completeRecipe = node.operation().completeRecipe();
                 var workpieces = new HashSet<IngredientKey>();
                 // Unknown dynamic carriers cannot identify a safe exclusion. Keep the
                 // native supplier's real candidates/auxiliaries rather than dropping this node.

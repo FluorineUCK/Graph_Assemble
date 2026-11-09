@@ -1,6 +1,7 @@
 package dev.graphassembly.client.view;
 
-import dev.graphassembly.core.Edge;
+import dev.graphassembly.core.definition.basic.Edge;
+import dev.graphassembly.core.definition.GraphLayout;
 import dev.graphassembly.client.view.GraphProjection.Projected;
 import java.util.*;
 
@@ -23,7 +24,7 @@ public final class GraphEdges {
             if (!Double.isFinite(originX) || !Double.isFinite(originY) || !Double.isFinite(zoom) || zoom <= 0)
                 throw new IllegalArgumentException("Plane transform requires finite coordinates and positive zoom");
         }
-        public Projected project(Edge.Waypoint point) {
+        public Projected project(GraphLayout.Waypoint point) {
             return new Projected(originX + point.x() * zoom, originY + point.y() * zoom, 1);
         }
     }
@@ -97,13 +98,15 @@ public final class GraphEdges {
     public static final class Topology {
         private record Connection(String from, String to) {}
         private final List<Edge> edges;
+        private final GraphLayout layout;
         private final Map<String, Integer> nodeIndex;
         private final boolean[] reciprocal;
         private final List<Integer> routeOrder;
 
-        private Topology(List<Edge> source, Diagnostics diagnostics) {
+        private Topology(List<Edge> source, GraphLayout layout, Diagnostics diagnostics) {
             if (diagnostics != null) diagnostics.topologyPreparations++;
             edges = List.copyOf(source);
+            this.layout = layout;
             Map<String, Integer> indices = new LinkedHashMap<>();
             Set<Connection> connections = new HashSet<>();
             for (var edge : edges) {
@@ -120,8 +123,9 @@ public final class GraphEdges {
             routeOrder = java.util.stream.IntStream.range(0, edges.size()).boxed()
                 .sorted(Comparator.comparing((Integer i) -> edges.get(i).from()).thenComparing(i -> edges.get(i).to())).toList();
         }
-        public static Topology of(List<Edge> edges) { return new Topology(edges, null); }
-        public static Topology of(List<Edge> edges, Diagnostics diagnostics) { return new Topology(edges, diagnostics); }
+        public static Topology of(List<Edge> edges) { return of(edges, new GraphLayout(Map.of(), Map.of())); }
+        public static Topology of(List<Edge> edges, Diagnostics diagnostics) { return new Topology(edges, new GraphLayout(Map.of(), Map.of()), diagnostics); }
+        public static Topology of(List<Edge> edges, GraphLayout layout) { return new Topology(edges, layout, null); }
         public List<Edge> edges() { return edges; }
         public Map<String, Integer> nodeIndex() { return nodeIndex; }
     }
@@ -395,10 +399,11 @@ public final class GraphEdges {
         for (int i = 0; i < topology.edges.size(); i++) {
             var edge = topology.edges.get(i);
             var a = nodes.get(edge.from()); var b = nodes.get(edge.to());
-            if (!sphere && !edge.waypoints().isEmpty()) {
+            var waypoints = topology.layout.edge(edge).waypoints();
+            if (!sphere && !waypoints.isEmpty()) {
                 List<Projected> routed = new ArrayList<>();
                 routed.add(a);
-                edge.waypoints().forEach(point -> routed.add(plane.project(point)));
+                waypoints.forEach(point -> routed.add(plane.project(point)));
                 routed.add(b);
                 result.add(new Path(edge, routed, true, longestSegments(routed).getFirst()));
                 continue;

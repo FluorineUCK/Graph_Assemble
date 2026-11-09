@@ -1,13 +1,18 @@
 package dev.graphassembly.compat.jei;
 
+import dev.graphassembly.recipe.OperationSpec;
+
+import dev.graphassembly.core.definition.GraphLayout;
+
 import dev.graphassembly.client.view.RecipeViewStateCache;
-import dev.graphassembly.core.Edge;
+import dev.graphassembly.core.definition.basic.Edge;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GraphViewStateTest {
     @Test void resetCameraRestoresCurrentModesInitialCameraWithoutClearingSelection() throws Exception {
-        var graph = dev.graphassembly.core.GraphCodec.parse("test:reset", com.google.gson.JsonParser.parseString(
+        var graph = dev.graphassembly.codec.GraphCodec.parse("test:reset", com.google.gson.JsonParser.parseString(
             java.nio.file.Files.readString(java.nio.file.Path.of("src/main/resources/data/graph_assembly/recipe/graph_filter.json")))
             .getAsJsonObject());
         for (boolean sphere : new boolean[]{false, true}) {
@@ -16,7 +21,7 @@ class GraphViewStateTest {
             view.selectMode(sphere);
             view.panX = 121; view.panY = -73; view.zoom = 2.6; view.yaw = .7; view.pitch = -1.2;
             view.selected = "body_ready"; view.selectedFinish = "assemble";
-            view.selectedEdge = graph.edges().getFirst();
+            view.selectedEdge = graph.topology().edges().getFirst();
             var edge = view.selectedEdge;
             view.resetCamera(graph);
             assertEquals(sphere, view.sphere);
@@ -34,22 +39,22 @@ class GraphViewStateTest {
                       {"id":"f","finish":true,"position":[40,30],"recipe":{"type":"create:pressing"}}],
              "edges":[{"from":"s","to":"f","waypoints":[[0,-50]]}],"outputs":[]}
             """).getAsJsonObject();
-        var compact = new GraphViewState(false, dev.graphassembly.core.GraphCodec.parse("test:compact", json));
+        var compact = new GraphViewState(false, dev.graphassembly.codec.GraphCodec.parse("test:compact", json));
         assertEquals(1, compact.zoom); assertEquals(0, compact.panX); assertEquals(0, compact.panY);
         json.getAsJsonArray("edges").get(0).getAsJsonObject().remove("waypoints");
         json.getAsJsonArray("nodes").get(0).getAsJsonObject().add("position", com.google.gson.JsonParser.parseString("[-500,-500]"));
-        var legacy = new GraphViewState(false, dev.graphassembly.core.GraphCodec.parse("test:legacy", json));
+        var legacy = new GraphViewState(false, dev.graphassembly.codec.GraphCodec.parse("test:legacy", json));
         assertEquals(1, legacy.zoom); assertEquals(0, legacy.panX); assertEquals(0, legacy.panY);
     }
     @Test void spaciousAuthoredGraphStartsWithItsWholeContourVisibleAndKeepsUserCameraOnRebuild() throws Exception {
-        var graph = dev.graphassembly.core.GraphCodec.parse("test:spacious", com.google.gson.JsonParser.parseString(
+        var graph = dev.graphassembly.codec.GraphCodec.parse("test:spacious", com.google.gson.JsonParser.parseString(
             java.nio.file.Files.readString(java.nio.file.Path.of("src/main/resources/data/graph_assembly/recipe/graph_filter.json")))
             .getAsJsonObject());
-        var states = new RecipeViewStateCache<dev.graphassembly.core.GraphDefinition, GraphViewState>();
+        var states = new RecipeViewStateCache<GraphDefinition<OperationSpec>, GraphViewState>();
         var view = states.get(graph, () -> new GraphViewState(false, graph));
-        var points = new java.util.ArrayList<dev.graphassembly.core.Edge.Waypoint>();
-        graph.nodes().values().forEach(n -> points.add(new dev.graphassembly.core.Edge.Waypoint(n.position().get(0), n.position().get(1))));
-        graph.edges().forEach(e -> points.addAll(e.waypoints()));
+        var points = new java.util.ArrayList<GraphLayout.Waypoint>();
+        graph.nodes().values().forEach(n -> points.add(new GraphLayout.Waypoint(graph.layout().node(n.id()).position().get(0), graph.layout().node(n.id()).position().get(1))));
+        graph.topology().edges().forEach(e -> points.addAll(graph.layout().edge(e).waypoints()));
         var canvas = dev.graphassembly.client.view.GraphGuiLayout.CANVAS;
         for (var p : points) {
             double x = dev.graphassembly.client.view.GraphGuiLayout.canvasCenterX() + view.panX + p.x() * view.zoom;
@@ -66,7 +71,7 @@ class GraphViewStateTest {
         assertEquals(1, sphere.zoom); assertEquals(0, sphere.panX); assertEquals(0, sphere.panY);
     }
     @Test void finishScopeAndOrdinarySelectionAreIndependentAndDoNotMoveCamera() {
-        var graph = dev.graphassembly.core.GraphCodec.parse("test:view", com.google.gson.JsonParser.parseString("""
+        var graph = dev.graphassembly.codec.GraphCodec.parse("test:view", com.google.gson.JsonParser.parseString("""
             {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
              "nodes":[{"id":"s","start":true,"recipe":{"type":"create:pressing"}},
                       {"id":"f","finish":true,"recipe":{"type":"create:pressing"}}],"edges":[],"outputs":[]}

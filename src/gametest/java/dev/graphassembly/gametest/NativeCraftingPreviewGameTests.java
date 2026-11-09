@@ -101,7 +101,7 @@ public final class NativeCraftingPreviewGameTests {
             for(int i=0;i<4;i++)menu.slotsChanged(menu.getSlot(1).container);
             check(level.random.nextLong()==expected,"Random branch preview cannot choose using world RNG");
             var preview=menu.getSlot(0).getItem();var state=Workpiece.read(level,preview);
-            check(state!=null && state.lockedNext()!=null && dev.graphassembly.core.GraphEngine.incompatibility(graph.definition(ID),state)==null,
+            check(state!=null && state.routing().lockedNext()!=null && dev.graphassembly.core.route.RouteResolver.incompatibility(graph.definition(ID),state)==null,
                 "Random branch preview must carry a legal representative locked target, not a graph-changed tooltip state");
             helper.succeed();
         } finally {player.getInventory().clearContent();player.inventoryMenu.clearCraftingContent();manager.replaceRecipes(saved);GraphIndex.invalidate();}

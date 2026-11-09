@@ -1,10 +1,10 @@
 package dev.graphassembly.client.view;
 
-import dev.graphassembly.core.FinishMode;
-import dev.graphassembly.core.GraphDefinition;
-import dev.graphassembly.core.WeightedOutput;
-import dev.graphassembly.core.OutputNode;
-import dev.graphassembly.core.OutputGroup;
+import dev.graphassembly.core.settlement.FinishMode;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
+import dev.graphassembly.core.io.WeightedOutput;
+import dev.graphassembly.core.io.OutputNode;
+import dev.graphassembly.core.io.OutputGroup;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,19 +39,19 @@ public record SettlementGroups(List<SettlementGroups.Finish> finishes, List<Sett
         }
     }
 
-    public static SettlementGroups from(GraphDefinition graph) {
+    public static SettlementGroups from(GraphDefinition<?> graph) {
         var view = SettlementViewModel.from(graph);
         List<Finish> finishes = new ArrayList<>();
         List<Candidate> overview = new ArrayList<>();
         for (var node : graph.nodes().values()) {
-            if (!node.finish()) continue;
+            if (!node.roles().finish()) continue;
             var rules = view.rules().stream().filter(rule -> rule.effectiveFinishes().contains(node.id())).toList();
             List<Candidate> success = new ArrayList<>();
             for (var rule : rules) collect(success, rule.condition().entries(), node.id(), rule.sourceNode(), rule.number(), "", List.of());
             success.forEach(candidate -> add(overview, candidate));
             List<Candidate> scrap = new ArrayList<>();
-            if (node.finishMode() == FinishMode.STRICT) collect(scrap, node.scrapEntries(), node.id(), node.id(), 0, "", List.of());
-            finishes.add(new Finish(node.id(), node.finishMode(), rules, success, scrap));
+            if (node.settlement().finishMode() == FinishMode.STRICT) collect(scrap, node.settlement().scrapEntries(), node.id(), node.id(), 0, "", List.of());
+            finishes.add(new Finish(node.id(), node.settlement().finishMode(), rules, success, scrap));
         }
         return new SettlementGroups(finishes, overview);
     }
@@ -67,7 +67,7 @@ public record SettlementGroups(List<SettlementGroups.Finish> finishes, List<Sett
                 var group = (OutputGroup)entry;
                 var ancestry = new ArrayList<>(groups);
                 ancestry.add(new GroupContext(path, group.mode(), group.weight(), group.chance()));
-                collect(candidates, group.results(), finish, source, number, path, ancestry);
+                collect(candidates, group.children(), finish, source, number, path, ancestry);
             }
         }
     }

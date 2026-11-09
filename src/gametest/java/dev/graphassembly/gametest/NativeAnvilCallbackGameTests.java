@@ -52,7 +52,7 @@ public final class NativeAnvilCallbackGameTests {
         void paidOnce(){
             var result=menu.getCarried();var stripped=result.copy();stripped.remove(GraphAssembly.PROGRESS.get());var progress=Workpiece.read(h.getLevel(),result);
             check(ItemStack.matches(stripped,nativeResult)&&player.experienceLevel==nativeXp&&menu.getSlot(0).getItem().isEmpty()
-                &&ItemStack.matches(menu.getSlot(1).getItem(),nativeRemainder)&&progress!=null&&progress.current().equals("repair")&&progress.history().equals(List.of("repair"))
+                &&ItemStack.matches(menu.getSlot(1).getItem(),nativeRemainder)&&progress!=null&&progress.current().equals("repair")&&progress.recentHistory().equals(List.of("repair"))
                 &&player.getInventory().isEmpty(),"Exactly one graph carrier and native-control XP/material payment");
         }
         public void close(){for(int i=0;i<3;i++)menu.getSlot(i).set(ItemStack.EMPTY);menu.setCarried(ItemStack.EMPTY);menu.removed(player);player.getInventory().clearContent();player.containerMenu=player.inventoryMenu;h.getLevel().removeBlock(pos,false);h.getLevel().getRecipeManager().replaceRecipes(saved);GraphIndex.invalidate();}

@@ -1,10 +1,15 @@
 package dev.graphassembly.client;
 
-import com.simibubi.create.content.processing.recipe.ProcessingRecipe;
+import dev.graphassembly.recipe.OperationSpec;
+
+import dev.graphassembly.core.definition.basic.GraphDefinition;
+import dev.graphassembly.core.io.PreflightResult;
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.progress.Progress;
+
 import dev.graphassembly.client.view.TooltipSummary;
 import dev.graphassembly.client.view.NextStepPresentation;
 import dev.graphassembly.client.view.WorkpieceTooltipRoles;
-import dev.graphassembly.core.*;
 import dev.graphassembly.filter.GraphFilterItem;
 import dev.graphassembly.integration.*;
 import dev.graphassembly.recipe.*;
@@ -20,23 +25,23 @@ import java.util.*;
 public final class PlayerTooltips {
     private PlayerTooltips() {}
     private static final Map<GraphIndex,Map<String,net.minecraft.world.item.crafting.Recipe<?>>> CACHE = new WeakHashMap<>();
-    private static net.minecraft.world.item.crafting.Recipe<?> recipe(Level level, GraphDefinition graph, String id) {
+    private static net.minecraft.world.item.crafting.Recipe<?> recipe(Level level, GraphDefinition<OperationSpec> graph, String id) {
         var steps = CACHE.computeIfAbsent(GraphIndex.get(level), index -> new HashMap<>());
         return steps.computeIfAbsent(graph.id() + "\u0000" + id, key ->
             GraphPreviewRecipes.resolve(level, graph, graph.nodes().get(id)).value());
     }
-    private static Component node(Level level, GraphDefinition graph, String id) {
+    private static Component node(Level level, GraphDefinition<OperationSpec> graph, String id) {
         if (graph == null || !graph.nodes().containsKey(id)) return Component.translatable("graph_assembly.operation.unavailable");
         try {
             var step = graph.nodes().get(id);
-            if (step.isCampfire()) return StepDescription.describeCampfire(step);
+            if (step.operation().isCampfire()) return StepDescription.describeCampfire(step);
             return StepDescription.player(recipe(level, graph, id));
         } catch (RuntimeException e) { return Component.translatable("graph_assembly.operation.unavailable"); }
     }
-    private static void nodes(List<Component> lines, Level level, GraphDefinition graph, Collection<String> ids, boolean advanced) {
+    private static void nodes(List<Component> lines, Level level, GraphDefinition<OperationSpec> graph, Collection<String> ids, boolean advanced) {
         nodes(lines, level, graph, ids, advanced, Set.of());
     }
-    private static void nodes(List<Component> lines, Level level, GraphDefinition graph, Collection<String> ids, boolean advanced, Set<String> inverted) {
+    private static void nodes(List<Component> lines, Level level, GraphDefinition<OperationSpec> graph, Collection<String> ids, boolean advanced, Set<String> inverted) {
         var summary = TooltipSummary.of(ids);
         for (String id : summary.shown()) {
             var label = node(level,graph,id);
@@ -93,13 +98,13 @@ public final class PlayerTooltips {
         }
         var graph = GraphIndex.get(level).graphs().get(state.graphId());
         if (advanced) lines.add(Component.literal(state.graphId()).withStyle(ChatFormatting.GRAY));
-        var preflight = GraphEngine.preflight(graph,state);
+        var preflight = GraphPipeline.preflight(graph,state);
         var roles = WorkpieceTooltipRoles.select(graph, state, preflight, level.potionBrewing(),
             event.getItemStack(), id -> recipe(level, graph, id));
         var auxiliary = roles.auxiliary();
         var allowed = roles.allowed();
-        lines.add(Component.translatable(state.pendingRoute()!=null && !allowed.isEmpty() ? "graph_assembly.next.routed"
-            : NextStepPresentation.workpieceKey(allowed.size(), state.lockedNext()!=null)).withStyle(ChatFormatting.AQUA));
+        lines.add(Component.translatable(state.routing().pendingRoute()!=null && !allowed.isEmpty() ? "graph_assembly.next.routed"
+            : NextStepPresentation.workpieceKey(allowed.size(), state.routing().lockedNext()!=null)).withStyle(ChatFormatting.AQUA));
         for (String id : TooltipSummary.of(allowed).shown()) {
             nodes(lines, level, graph, List.of(id), advanced);
             if (roles.primary().contains(id)) join(lines, level, graph, id, 0, advanced);
@@ -110,36 +115,36 @@ public final class PlayerTooltips {
         var blocked = new LinkedHashMap<>(preflight.blocked());
         auxiliary.keySet().forEach(blocked::remove);
         for (String id : TooltipSummary.of(blocked.keySet()).shown()) {
-            String key = preflight.blockedReasons().get(id) == GraphEngine.BlockedReason.PRIMARY_CONDITIONS
+            String key = preflight.blocked().get(id).reason() == PreflightResult.BlockedReason.PRIMARY_CONDITIONS
                 ? "graph_assembly.operation.blocked.conditions" : "graph_assembly.operation.blocked";
             lines.add(Component.translatable(key,node(level,graph,id)).withStyle(ChatFormatting.RED));
-            if (advanced) lines.add(Component.literal(blocked.get(id)).withStyle(ChatFormatting.DARK_GRAY));
+            if (advanced) lines.add(Component.literal(blocked.get(id).message()).withStyle(ChatFormatting.DARK_GRAY));
         }
         if (blocked.size()>TooltipSummary.MAX_ROWS) lines.add(Component.translatable("graph_assembly.summary.more",blocked.size()-TooltipSummary.MAX_ROWS));
-        if (!state.history().isEmpty()) {
+        if (!state.recentHistory().isEmpty()) {
             lines.add(Component.translatable("graph_assembly.recent.title").withStyle(ChatFormatting.GRAY));
-            nodes(lines,level,graph,state.history(),advanced);
+            nodes(lines,level,graph,state.recentHistory(),advanced);
         }
-        if (!state.marks().isEmpty()) {
-            var marks = TooltipSummary.of(state.marks().entrySet());
+        if (!state.marks().values().isEmpty()) {
+            var marks = TooltipSummary.of(state.marks().values().entrySet());
             lines.add(Component.translatable("graph_assembly.marks",marks.shown().toString()).withStyle(ChatFormatting.GRAY));
             if(marks.remaining()>0) lines.add(Component.translatable("graph_assembly.summary.more",marks.remaining()));
         }
     }
 
-    private static void join(List<Component> lines, Level level, GraphDefinition graph, String id, int ownInput, boolean advanced) {
+    private static void join(List<Component> lines, Level level, GraphDefinition<OperationSpec> graph, String id, int ownInput, boolean advanced) {
         var target = graph.nodes().get(id);
-        if (target.workpieceInputs().stream().noneMatch(role -> role.itemInput() > 0)) return;
+        if (target.inputs().workpieceInputs().stream().noneMatch(role -> role.itemInput() > 0)) return;
         var ownRole = Component.translatable("graph_assembly.join." + (ownInput == 0 ? "primary" : "auxiliary"));
         lines.add(ownRole.withStyle(ChatFormatting.GOLD));
         var partners = new TreeSet<Integer>();
         partners.add(0);
-        target.workpieceInputs().forEach(role -> partners.add(role.itemInput()));
+        target.inputs().workpieceInputs().forEach(role -> partners.add(role.itemInput()));
         partners.remove(ownInput);
         net.minecraft.world.item.crafting.Recipe<?> nativeRecipe;
         try { nativeRecipe = recipe(level, graph, id); }
         catch (RuntimeException unavailable) { return; }
-        var brewing = nativeRecipe instanceof dev.graphassembly.integration.brewing.BrewingRecipe descriptor ? descriptor : null;
+        var brewing = nativeRecipe instanceof dev.graphassembly.integration.vanilla.brewing.BrewingRecipe descriptor ? descriptor : null;
         if (brewing != null) ownRole.append(" · ").append(StepDescription.brewingInput(brewing, ownInput));
         var logicalIngredients = brewing != null ? List.<net.minecraft.world.item.crafting.Ingredient>of()
             : nativeRecipe.getType() == net.minecraft.world.item.crafting.RecipeType.CRAFTING
@@ -163,14 +168,14 @@ public final class PlayerTooltips {
                 names = genericNames;
             }
             lines.add(Component.translatable("graph_assembly.join.partner." + (index == 0 ? "primary" : "auxiliary"), names).withStyle(ChatFormatting.GRAY));
-            var role = target.workpieceInput(index);
+            var role = target.inputs().workpieceInput(index);
             if (role != null && !role.currentNodes().isEmpty()) {
                 var current = Component.empty();
                 for (String previous : TooltipSummary.of(role.currentNodes()).shown()) {
                     if (!current.getSiblings().isEmpty()) current.append(Component.translatable("graph_assembly.join.or"));
                     try {
                         var step = graph.nodes().get(previous);
-                        current.append(step.isCampfire() ? StepDescription.describeCampfire(step)
+                        current.append(step.operation().isCampfire() ? StepDescription.describeCampfire(step)
                             : StepDescription.describe(recipe(level, graph, previous)));
                     }
                     catch (RuntimeException unavailable) { current.append(node(level, graph, previous)); }

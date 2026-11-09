@@ -1,11 +1,15 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.codec.ProgressCodec;
+import dev.graphassembly.core.condition.mark.MarkAccounting;
+import dev.graphassembly.core.progress.Progress;
+import dev.graphassembly.core.route.RouteState;
+
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.Progress;
 import dev.graphassembly.recipe.Workpiece;
-import dev.graphassembly.integration.projection.IngredientDecoration;
+import dev.graphassembly.integration.bridge.IngredientDecoration;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.item.ItemStack;
@@ -197,9 +201,9 @@ public final class OrdinaryRecipeQueryGameTests {
     }
 
     private static List<String> progressValues() {
-        var progress = new Progress("graph_assembly:query_fixture", "start", "start", Map.of(), List.of(), Map.of(), null, List.of("start"));
-        var stale = new Progress("graph_assembly:removed_graph", "old", "missing", Map.of(), List.of(), Map.of(), null, List.of("old"));
-        return List.of(progress.toJsonString(), stale.toJsonString(), "{invalid-progress", "");
+        var progress = new Progress("graph_assembly:query_fixture", "start", "start", new MarkAccounting.State(Map.of(), Map.of()), List.of(), new RouteState(null, null), List.of("start"));
+        var stale = new Progress("graph_assembly:removed_graph", "old", "missing", new MarkAccounting.State(Map.of(), Map.of()), List.of(), new RouteState(null, null), List.of("old"));
+        return List.of(ProgressCodec.toJsonString(progress), ProgressCodec.toJsonString(stale), "{invalid-progress", "");
     }
 
     private static ItemStack marked(net.minecraft.world.item.Item item, String progress) {

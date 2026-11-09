@@ -14,7 +14,7 @@ class PreviewRecipeDataTest {
     @ParameterizedTest
     @ValueSource(strings={"minecraft:crafting_special_armordye","minecraft:crafting_special_repairitem","graph_assembly:brewing"})
     void dynamicCarrierDataflowStaysPureAndNeverInventsGraphDefault(String serializer) {
-        var graph=dev.graphassembly.core.GraphCodec.parse("test:pure_special",json("""
+        var graph=dev.graphassembly.codec.GraphCodec.parse("test:pure_special",json("""
             {"ingredient":{"item":"minecraft:leather_chestplate"},"transitional_item":"minecraft:iron_nugget",
              "nodes":[{"id":"special","start":true,"recipe":{"type":"%s"}},
               {"id":"next","recipe":{"type":"create:pressing"}}],
@@ -22,7 +22,7 @@ class PreviewRecipeDataTest {
             """.formatted(serializer)));
         if (serializer.equals("graph_assembly:brewing")) {
             var descriptor = graph.nodes().get("special");
-            assertEquals(descriptor.recipe(), PreviewRecipeData.forNode(graph, descriptor));
+            assertEquals(descriptor.operation().recipe(), PreviewRecipeData.forNode(graph, descriptor));
         }
         var next=graph.nodes().get("next");
         assertThrows(PreviewRecipeData.UnknownDynamicCarrier.class,()->PreviewRecipeData.carriedInputs(graph,next));
@@ -31,7 +31,7 @@ class PreviewRecipeDataTest {
     }
 
     @Test void anvilDescriptorIsNotMaterializedAndItsSuccessorCarrierIsUnknown() {
-        var graph=dev.graphassembly.core.GraphCodec.parse("test:anvil_display",json("""
+        var graph=dev.graphassembly.codec.GraphCodec.parse("test:anvil_display",json("""
             {"ingredient":{"item":"minecraft:iron_sword"},"transitional_item":"minecraft:iron_nugget",
              "nodes":[{"id":"combine","start":true,"recipe":{"type":"graph_assembly:anvil","action":"combine","addition":{"item":"minecraft:gold_ingot"}}},
               {"id":"repair","recipe":{"type":"graph_assembly:anvil","action":"repair","addition":{"tag":"c:ingots/iron"}}},
@@ -43,8 +43,8 @@ class PreviewRecipeDataTest {
         var next=graph.nodes().get("next");
         assertThrows(PreviewRecipeData.UnknownDynamicCarrier.class,()->PreviewRecipeData.carriedInputs(graph,repair));
         assertThrows(PreviewRecipeData.UnknownDynamicCarrier.class,()->PreviewRecipeData.forNode(graph,next));
-        assertEquals(combine.recipe(),PreviewRecipeData.forNode(graph,combine));
-        assertEquals(repair.recipe(),PreviewRecipeData.forNode(graph,repair));
+        assertEquals(combine.operation().recipe(),PreviewRecipeData.forNode(graph,combine));
+        assertEquals(repair.operation().recipe(),PreviewRecipeData.forNode(graph,repair));
     }
     @Test void nativeInputVisibilityRetainsSupplierAuxiliariesWhenDynamicCarrierIsUnknown() {
         var source=json("""
@@ -53,7 +53,7 @@ class PreviewRecipeDataTest {
               {"id":"finish","finish":true,"recipe":{"type":"minecraft:smithing_trim"}}],
              "edges":[{"from":"trim","to":"finish"}],"outputs":[]}
             """);
-        var graph=dev.graphassembly.core.GraphCodec.parse("test:native_supplier",source);var finish=graph.nodes().get("finish");
+        var graph=dev.graphassembly.codec.GraphCodec.parse("test:native_supplier",source);var finish=graph.nodes().get("finish");
         var supplier=java.util.List.of("minecraft:diamond_chestplate","minecraft:coast_armor_trim_smithing_template","minecraft:quartz");
         assertThrows(PreviewRecipeData.UnknownDynamicCarrier.class,()->PreviewRecipeData.carriedInputs(graph,finish));
         var hidden=PreviewRecipeData.nativeInputsToHide(graph,finish);
@@ -62,23 +62,23 @@ class PreviewRecipeDataTest {
 
         var mixed=source.deepCopy();mixed.getAsJsonArray("nodes").add(json("{\"id\":\"known\",\"start\":true,\"recipe\":{\"type\":\"create:pressing\"}}"));
         mixed.getAsJsonArray("edges").add(json("{\"from\":\"known\",\"to\":\"finish\"}"));
-        var mixedGraph=dev.graphassembly.core.GraphCodec.parse("test:mixed_supplier",mixed);
+        var mixedGraph=dev.graphassembly.codec.GraphCodec.parse("test:mixed_supplier",mixed);
         assertEquals(java.util.List.of(),PreviewRecipeData.nativeInputsToHide(mixedGraph,mixedGraph.nodes().get("finish")),"A partial known set at a mixed merge cannot hide native candidates");
 
         var known=source.deepCopy();known.getAsJsonArray("nodes").get(0).getAsJsonObject().add("recipe",json("{\"type\":\"create:pressing\"}"));
-        var knownGraph=dev.graphassembly.core.GraphCodec.parse("test:known_supplier",known);
+        var knownGraph=dev.graphassembly.codec.GraphCodec.parse("test:known_supplier",known);
         assertEquals(java.util.List.of("minecraft:iron_nugget"),PreviewRecipeData.nativeInputsToHide(knownGraph,knownGraph.nodes().get("finish")),"Existing statically known internal carriers remain hidden");
         assertEquals(java.util.List.of(),PreviewRecipeData.nativeInputsToHide(knownGraph,knownGraph.nodes().get("trim")),"Raw start inputs remain visible even if their item is also a carrier");
 
         var reference=known.deepCopy();reference.getAsJsonArray("nodes").get(1).getAsJsonObject().add("recipe",json("{\"type\":\"minecraft:smithing_trim\",\"recipe_id\":\"test:native_reference\"}"));
-        var referenceGraph=dev.graphassembly.core.GraphCodec.parse("test:reference_supplier",reference);
+        var referenceGraph=dev.graphassembly.codec.GraphCodec.parse("test:reference_supplier",reference);
         assertEquals(java.util.List.of(),PreviewRecipeData.nativeInputsToHide(referenceGraph,referenceGraph.nodes().get("finish")),"Complete native references retain their entire original supplier candidate set");
     }
 
     @Test void explicitRouteCarriesActualOutputWithoutPretendingToProcessEdgeSource() {
         for (String route : new String[]{"{\"type\":\"goto_node\",\"node\":\"target\"}",
                 "{\"type\":\"enter_edge\",\"from\":\"unused\",\"to\":\"target\"}"}) {
-            var graph=dev.graphassembly.core.GraphCodec.parse("test:route_preview", json("""
+            var graph=dev.graphassembly.codec.GraphCodec.parse("test:route_preview", json("""
                 {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
                  "nodes":[{"id":"s","start":true,"transitional_item":"minecraft:gold_nugget","recipe":{"type":"create:pressing"},"progress_actions":[%s]},
                  {"id":"target","recipe":{"type":"create:cutting"},"workpiece_inputs":[{"item_input":0,"current_nodes":["s"]}]},

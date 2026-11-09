@@ -3,7 +3,7 @@ package dev.graphassembly.client;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.graphassembly.client.view.SettlementDescription;
-import dev.graphassembly.core.GraphCodec;
+import dev.graphassembly.codec.GraphCodec;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -71,7 +71,10 @@ class LanguageResourcesTest {
             }
             try (var examples = Files.list(Path.of("examples/datapack"))) {
                 for (var file : examples.filter(path -> path.toString().endsWith(".json")).toList()) {
-                    var graph = GraphCodec.parse("test:language", JsonParser.parseString(Files.readString(file)).getAsJsonObject());
+                    var json = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+                    // Native sequences use Create's own description/translation model, not graph settlement text.
+                    if (json.has("type") && json.get("type").getAsString().equals("create:sequenced_assembly")) continue;
+                    var graph = GraphCodec.parse("test:language", json);
                     for (var line : SettlementDescription.from(graph).paragraphs()) {
                         String key = "graph_assembly.settlement." + line.key();
                         assertTrue(language.has(key), locale + ": " + key);

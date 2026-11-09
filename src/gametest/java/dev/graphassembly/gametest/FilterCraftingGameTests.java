@@ -1,5 +1,9 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.condition.mark.MarkAccounting;
+import dev.graphassembly.core.progress.Progress;
+import dev.graphassembly.core.route.RouteState;
+
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import com.simibubi.create.AllBlocks;
@@ -14,7 +18,6 @@ import com.simibubi.create.content.processing.basin.BasinBlockEntity;
 import com.simibubi.create.content.processing.basin.BasinOperatingBlockEntity;
 import com.simibubi.create.content.processing.basin.BasinRecipe;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.Progress;
 import dev.graphassembly.filter.FilterSelection;
 import dev.graphassembly.recipe.GraphIndex;
 import dev.graphassembly.recipe.GraphRecipe;
@@ -148,7 +151,7 @@ public final class FilterCraftingGameTests {
         var recipes = matching(helper);
         var operation = dev.graphassembly.integration.GraphOperation.get(recipes.getFirst());
         check(operation != null && operation.primary().is(AllItems.ANDESITE_ALLOY.get()), "Alloy, not either infested auxiliary, must be the mixer primary");
-        check(operation.node().id().equals("insert_start") && operation.node().workpieceInputs().isEmpty(), "Raw auxiliaries use ordinary Ingredient binding, not declared progress roles");
+        check(operation.node().id().equals("insert_start") && operation.node().inputs().workpieceInputs().isEmpty(), "Raw auxiliaries use ordinary Ingredient binding, not declared progress roles");
         check(recipes.size() == 1 && BasinRecipe.apply(basin, recipes.getFirst()), "Real mixer binds alloy plus two mixed infested inputs");
         var result = output(basin);
         check(result.is(GraphAssembly.INFESTED_INSERT.get()) && Workpiece.read(result).current().equals("insert_start"), "Mixer creates exclusive insert carrier");
@@ -176,7 +179,7 @@ public final class FilterCraftingGameTests {
             var expectedOutput = dev.graphassembly.integration.NativeSteps.stack(row.get(2));
             check(preview.getIngredients().getFirst().test(expectedInput), row.get(0) + " preview uses wrong primary input: " + row.get(1));
             check(ItemStack.isSameItem(preview.getRollableResults().getFirst().getStack(), expectedOutput), row.get(0) + " preview changes branch carrier");
-            if (graph.nodes().get(row.get(0)).start()) {
+            if (graph.nodes().get(row.get(0)).roles().start()) {
                 check(!preview.getIngredients().getFirst().test(expectedOutput), "Start must show raw ingredient, not require its own output");
             }
         }
@@ -293,8 +296,8 @@ public final class FilterCraftingGameTests {
             var insert = press(press, unreadyInsert, "insert_ready");
             var basin = basin(helper, false);
             var wrongGraph = Workpiece.read(insert);
-            var stale = Workpiece.write(insert.copy(), new Progress("test:other_graph", wrongGraph.entry(), wrongGraph.current(), wrongGraph.marks(), wrongGraph.checkpoints(), wrongGraph.rewardCounts(), null, wrongGraph.history()));
-            var wrongHistory = Workpiece.write(insert.copy(), new Progress(ID, "insert_start", "insert_ready", wrongGraph.marks(), List.of("insert_ready", "insert_start"), wrongGraph.rewardCounts(), null, wrongGraph.history()));
+            var stale = Workpiece.write(insert.copy(), new Progress("test:other_graph", wrongGraph.entry(), wrongGraph.current(), new MarkAccounting.State(wrongGraph.marks().values(), wrongGraph.marks().grantCounts()), wrongGraph.checkpoints(), new RouteState(null, null), wrongGraph.recentHistory()));
+            var wrongHistory = Workpiece.write(insert.copy(), new Progress(ID, "insert_start", "insert_ready", new MarkAccounting.State(wrongGraph.marks().values(), wrongGraph.marks().grantCounts()), List.of("insert_ready", "insert_start"), new RouteState(null, null), wrongGraph.recentHistory()));
             var wrongRole = Workpiece.write(insert.copy(), Workpiece.read(body));
             var cases = List.of(
                 List.of(body, ItemStack.EMPTY), List.of(body, new ItemStack(Items.INFESTED_STONE, 2)),

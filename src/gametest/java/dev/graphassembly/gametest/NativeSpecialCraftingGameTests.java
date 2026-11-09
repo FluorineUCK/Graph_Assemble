@@ -1,5 +1,8 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.progress.TransitionResult;
+
 import com.google.gson.JsonParser;
 import dev.graphassembly.GraphAssembly;
 import dev.graphassembly.recipe.GraphIndex;
@@ -69,7 +72,7 @@ public final class NativeSpecialCraftingGameTests {
             check(result.getDamageValue()==37&&Objects.equals(result.get(DataComponents.CUSTOM_NAME),base.get(DataComponents.CUSTOM_NAME))
                 &&Objects.equals(result.get(DataComponents.ENCHANTMENTS),base.get(DataComponents.ENCHANTMENTS)),"Native dye preserves name, damage and enchantments");
             var state=Workpiece.read(level,result);
-            check(state!=null&&state.graphId().equals(id)&&state.current().equals("dye")&&state.history().equals(List.of("dye")),"One graph step advanced");
+            check(state!=null&&state.graphId().equals(id)&&state.current().equals("dye")&&state.recentHistory().equals(List.of("dye")),"One graph step advanced");
             check(menu.getSlot(1).getItem().isEmpty()&&menu.getSlot(2).getItem().getCount()==1
                 &&menu.getSlot(4).getItem().getCount()==1,"Pickup pays exactly one unit per occupied cell");
             helper.succeed();
@@ -88,16 +91,16 @@ public final class NativeSpecialCraftingGameTests {
         try {
             var graph=new GraphRecipe(JsonParser.parseString("""
                 {"ingredient":{"item":"minecraft:diamond_chestplate"},"transitional_item":"minecraft:iron_nugget",
-                 "nodes":[{"id":"left","start":true,"transitional_item":"minecraft:diamond_chestplate","rewards":{"quality":3},"recipe":{"type":"create:pressing"}},
-                   {"id":"right","start":true,"ingredient":{"item":"minecraft:quartz"},"transitional_item":"minecraft:diamond_chestplate","checkpoint":true,"rewards":{"quality":99},"recipe":{"type":"create:cutting"}},
+                 "nodes":[{"id":"left","start":true,"transitional_item":"minecraft:diamond_chestplate","mark_amounts":{"quality":3},"recipe":{"type":"create:pressing"}},
+                   {"id":"right","start":true,"ingredient":{"item":"minecraft:quartz"},"transitional_item":"minecraft:diamond_chestplate","checkpoint":true,"mark_amounts":{"quality":99},"recipe":{"type":"create:cutting"}},
                    {"id":"repair","workpiece_inputs":[{"item_input":0,"current_nodes":["left","right"]},{"item_input":1,"current_nodes":["left","right"]}],"recipe":{"type":"minecraft:crafting_special_repairitem"}},
                    {"id":"finish","finish":true,"recipe":{"type":"create:pressing"}}],
                  "edges":[{"from":"left","to":"repair"},{"from":"right","to":"repair"},{"from":"repair","to":"finish"}],
                  "outputs":[{"results":[{"item":"minecraft:diamond"}]}]}
                 """).getAsJsonObject());
             var definition=graph.definition(id);
-            var left=Workpiece.write(new ItemStack(Items.DIAMOND_CHESTPLATE),dev.graphassembly.core.GraphEngine.complete(definition,null,"left","minecraft:diamond_chestplate",()->0).state());
-            var right=Workpiece.write(new ItemStack(Items.DIAMOND_CHESTPLATE),dev.graphassembly.core.GraphEngine.complete(definition,null,"right","minecraft:quartz",()->0).state());
+            var left=Workpiece.write(new ItemStack(Items.DIAMOND_CHESTPLATE),((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(definition, null, "left", "minecraft:diamond_chestplate"), ()->0)).progress());
+            var right=Workpiece.write(new ItemStack(Items.DIAMOND_CHESTPLATE),((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(definition, null, "right", "minecraft:quartz"), ()->0)).progress());
             left.setDamageValue(420);right.setDamageValue(320);
             left.set(DataComponents.CUSTOM_NAME,Component.literal("Left named armor"));
             right.set(DataComponents.CUSTOM_NAME,Component.literal("Right named armor"));
@@ -125,8 +128,8 @@ public final class NativeSpecialCraftingGameTests {
                     &&Objects.equals(result.get(DataComponents.ENCHANTMENTS),expected.get(DataComponents.ENCHANTMENTS))
                     &&!result.has(DataComponents.CUSTOM_NAME),"Repair keeps original native durability/curses without restoring ordinary enchantments or names");
                 var inherited=Workpiece.read(level,first);
-                check(state!=null&&state.current().equals("repair")&&state.history().equals(List.of(reversed?"right":"left","repair"))
-                    &&state.marks().equals(inherited.marks())&&state.checkpoints().equals(inherited.checkpoints()),
+                check(state!=null&&state.current().equals("repair")&&state.recentHistory().equals(List.of(reversed?"right":"left","repair"))
+                    &&state.marks().values().equals(inherited.marks().values())&&state.checkpoints().equals(inherited.checkpoints()),
                     "Only the fixed row-major first cell owns repair history, marks and checkpoints, even after reversing damage/name identities");
                 check(menu.getSlot(2).getItem().isEmpty()&&menu.getSlot(4).getItem().isEmpty(),"Repair pays exactly its two occupied cells");
             }
@@ -177,7 +180,7 @@ public final class NativeSpecialCraftingGameTests {
                     helper.runAfterDelay(12,()->{
                         try {
                             var output=chest.getItem(0);var state=Workpiece.read(level,output);
-                            check(output.is(Items.LEATHER_CHESTPLATE)&&state!=null&&state.current().equals("dye")&&state.history().equals(List.of("dye")),
+                            check(output.is(Items.LEATHER_CHESTPLATE)&&state!=null&&state.current().equals("dye")&&state.recentHistory().equals(List.of("dye")),
                                 "Scheduled crafter special graph pulse delivers the native carrier with exactly one graph step");
                             check(output.getDamageValue()==17&&Objects.equals(output.get(DataComponents.CUSTOM_NAME),base.get(DataComponents.CUSTOM_NAME))
                                 &&Objects.equals(output.get(DataComponents.DYED_COLOR),expected.get(DataComponents.DYED_COLOR)),"Crafter native assembled components survive graph default");

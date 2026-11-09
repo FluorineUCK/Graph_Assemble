@@ -4,7 +4,7 @@ import dev.graphassembly.client.view.GraphProjection.Projected;
 import dev.graphassembly.client.view.NodePresentation.Bounds;
 import dev.graphassembly.client.view.NodePresentation.Surface;
 import dev.graphassembly.client.view.NodePresentation.Transform;
-import dev.graphassembly.core.Edge;
+import dev.graphassembly.core.definition.basic.Edge;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;

@@ -28,7 +28,7 @@ KubeJS-specific test example:
 
 This task stages the scripts in `src/gametest/kubejs` automatically; CreateJS-specific assertions are skipped when CreateJS is not installed. Run the client with `./gradlew.bat runClient`, and the test client with `./gradlew.bat runVerificationClient`.
 
-Regular GameTests and `-PwithKubejs` share the `run/gametest` configuration directory. If a KubeJS-specific scenario finds scripts staged from an earlier run while KubeJS is disabled, that scenario will not take effect; GameTests can still run.
+Regular GameTests and `-PwithKubejs` share the `run/gametest` configuration directory. Scripts left by an earlier KubeJS run have no effect when KubeJS is disabled. GameTests still run, but the KubeJS-specific scenarios do not.
 
 ## Directories
 

@@ -19,6 +19,24 @@ final class KubeGraphValues {
         return value;
     }
 
+    /** Create ProcessingOutput uses native id/count/components plus chance, not graph weight. */
+    static JsonObject nativeOutput(Context cx, Object input) {
+        var data = json(cx, input);
+        JsonElement chance = null;
+        if (data.isJsonObject() && data.getAsJsonObject().has("chance")) chance = data.getAsJsonObject().remove("chance");
+        var graph = entry(cx, data);
+        if (!graph.has("item")) throw new IllegalArgumentException("Native sequence output must be an item stack");
+        for (String key : graph.keySet()) if (!java.util.Set.of("item", "count", "components").contains(key))
+            throw new IllegalArgumentException("Native sequence output does not support graph field " + key);
+        graph.add("id", graph.remove("item"));
+        if (chance != null) {
+            double number = chance.getAsDouble();
+            if (!Double.isFinite(number) || number < 0) throw new IllegalArgumentException("Native output chance must be nonnegative and finite");
+            graph.add("chance", chance);
+        }
+        return graph;
+    }
+
     static JsonElement ingredient(Context cx, Object value) {
         var ingredient = IngredientWrapper.wrap(cx, unwrap(value));
         return Ingredient.CODEC.encodeStart(RegistryAccessContainer.of(cx).json(), ingredient).getOrThrow();
@@ -68,7 +86,7 @@ final class KubeGraphValues {
         return result;
     }
 
-    private static JsonArray entries(Context cx, JsonElement value) {
+    static JsonArray entries(Context cx, JsonElement value) {
         var result = new JsonArray();
         if (value.isJsonArray()) for (var entry : value.getAsJsonArray()) result.add(entry(cx, entry));
         else result.add(entry(cx, value));

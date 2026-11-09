@@ -26,7 +26,7 @@ public final class AssemblyDiagnostics {
         var verified=new java.util.TreeSet<>(NativeSteps.EXECUTION_SERIALIZERS);
         lines.add("Verified Create processing-device serializers: " + verified);
         lines.add("Verified native crafting-menu serializers (exact standard classes; InventoryMenu/CraftingMenu only): "
-            + new java.util.TreeSet<>(dev.graphassembly.integration.crafting.CraftingDefinition.SERIALIZERS));
+            + new java.util.TreeSet<>(dev.graphassembly.integration.vanilla.crafting.CraftingDefinition.SERIALIZERS));
         GraphIndex.get(level).disabledReasons().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
             .forEach(entry -> lines.add("Disabled graph " + entry.getKey() + ": " + entry.getValue()));
         return List.copyOf(lines);

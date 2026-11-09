@@ -35,8 +35,8 @@ public final class OverflowGameTests {
         try {
             var json = JsonParser.parseString("""
                 {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
-                 "nodes":[{"id":"s","start":true,"recipe":{"type":"create:pressing"},"rewards":{"x":2147483647}},
-                          {"id":"fill","rewards":{"x":1},"recipe":{"type":"create:filling",
+                 "nodes":[{"id":"s","start":true,"recipe":{"type":"create:pressing"},"mark_amounts":{"x":2147483647}},
+                          {"id":"fill","mark_amounts":{"x":1},"recipe":{"type":"create:filling",
                            "ingredients":[{"type":"neoforge:single","fluid":"minecraft:water","amount":250}]}}],
                  "edges":[{"from":"s","to":"s"},{"from":"s","to":"fill"}]}
                 """).getAsJsonObject();
@@ -46,7 +46,7 @@ public final class OverflowGameTests {
             var press = (MechanicalPressBlockEntity) helper.getBlockEntity(new BlockPos(1, 1, 1));
             var piece = press.getRecipe(new ItemStack(Items.IRON_INGOT)).orElseThrow().value().rollResults(level.random).getFirst();
             String saved = piece.get(GraphAssembly.PROGRESS.get());
-            check(Workpiece.read(piece).marks().get("x") == Integer.MAX_VALUE, "First legal reward must not be clamped");
+            check(Workpiece.read(piece).marks().values().get("x") == Integer.MAX_VALUE, "First legal reward must not be clamped");
             check(press.getRecipe(piece).isEmpty(), "Press must reject the overflowing loop before native consumption");
             check(!FillingBySpout.canItemBeFilled(level, piece), "Spout preview must not offer overflowing work");
             var water = new FluidStack(Fluids.WATER, 1000);

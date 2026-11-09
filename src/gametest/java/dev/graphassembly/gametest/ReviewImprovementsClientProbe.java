@@ -1,8 +1,9 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.codec.GraphCodec;
+
 import com.google.gson.*;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.*;
 import dev.graphassembly.client.gui.GraphGuiAssets;
 import dev.graphassembly.client.view.PreviewLifecycle;
 import dev.graphassembly.compat.jei.GraphJeiPlugin;

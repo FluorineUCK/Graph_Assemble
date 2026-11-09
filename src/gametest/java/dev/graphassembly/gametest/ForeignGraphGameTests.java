@@ -3,7 +3,7 @@ package dev.graphassembly.gametest;
 import com.google.gson.JsonParser;
 import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.Progress;
+import dev.graphassembly.core.progress.Progress;
 import dev.graphassembly.integration.NativeSteps;
 import dev.graphassembly.recipe.GraphIndex;
 import dev.graphassembly.recipe.GraphRecipe;

@@ -24,7 +24,7 @@ class NodePresentationTest {
                     {"ingredient":{"item":"minecraft:leather_chestplate"},"transitional_item":"minecraft:iron_nugget",
                      "nodes":[{"id":"node","start":true,"finish":%s,"recipe":{"type":"%s"}}],"edges":[],"outputs":[]}
                     """.formatted(finish,serializer)).getAsJsonObject();
-                var graph=dev.graphassembly.core.GraphCodec.parse("test:carrier_tooltip",json);
+                var graph=dev.graphassembly.codec.GraphCodec.parse("test:carrier_tooltip",json);
                 assertEquals(serializer.equals("minecraft:crafting_shapeless"),NodePresentation.showStaticCarrier(graph.nodes().get("node")),
                     "Dynamic native nodes omit unprovable carrier claims in both intermediate and finish tooltip paths");
             }

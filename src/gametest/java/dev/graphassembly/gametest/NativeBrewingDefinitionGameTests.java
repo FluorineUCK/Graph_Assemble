@@ -1,8 +1,11 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.condition.mark.MarkAccounting;
+import dev.graphassembly.core.progress.Progress;
+import dev.graphassembly.core.route.RouteState;
+
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
-import dev.graphassembly.core.Progress;
 import dev.graphassembly.recipe.Workpiece;
 import net.minecraft.world.item.crafting.Recipe;
 import java.util.Map;
@@ -15,7 +18,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.minecraft.world.item.crafting.Ingredient;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.integration.brewing.*;
+import dev.graphassembly.integration.vanilla.brewing.*;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.*;
 import net.minecraft.world.item.alchemy.*;
@@ -118,7 +121,7 @@ public final class NativeBrewingDefinitionGameTests {
             data.getAsJsonArray("nodes").get(0).getAsJsonObject().addProperty("transitional_item", "minecraft:iron_nugget");
             manager.replaceRecipes(List.of(new RecipeHolder<>(ID, new GraphRecipe(data))));
             var reason = GraphIndex.get(level).disabledReason(ID.toString());
-            check(reason != null && reason.contains("node transitional_item"), "Node carrier must be rejected");
+            check(reason != null && reason.contains("node transitional_item"), "NodeDefinition carrier must be rejected");
         } finally {
             manager.replaceRecipes(saved);
             GraphIndex.invalidate();
@@ -154,7 +157,7 @@ public final class NativeBrewingDefinitionGameTests {
             var bottle = BrewingLookup.find(level, List.of(splash, water, empty, wart, empty));
             check(bottle.bottles().size() == 2 && bottle.bottles().getFirst().slot() == 0
                 && bottle.bottles().getFirst().operation() == null && bottle.bottles().get(1).operation() != null, "Ordinary bottle participates only in bottle mode");
-            var missing = new Progress("test:missing", "brew", "brew", Map.of(), List.of(), Map.of(), null, List.of("brew"));
+            var missing = new Progress("test:missing", "brew", "brew", new MarkAccounting.State(Map.of(), Map.of()), List.of(), new RouteState(null, null), List.of("brew"));
             var badBottle = Workpiece.write(water.copy(), missing);
             var badMaterial = Workpiece.write(wart.copyWithCount(1), missing);
             var badFuel = Workpiece.write(new ItemStack(Items.BLAZE_POWDER), missing);
@@ -232,7 +235,7 @@ public final class NativeBrewingDefinitionGameTests {
     @GameTest(template = "test_empty", batch = "native_brewing")
     public static void graphViewerResolvesBothBrewingRolesWithoutSyntheticResult(GameTestHelper helper) {
         var level = helper.getLevel();
-        var graph = dev.graphassembly.core.GraphCodec.parse("test:brewing_display", JsonParser.parseString("""
+        var graph = dev.graphassembly.codec.GraphCodec.parse("test:brewing_display", JsonParser.parseString("""
             {"ingredient":{"item":"minecraft:nether_wart"},"transitional_item":"minecraft:nether_wart",
              "nodes":[{"id":"first","start":true,"recipe":{"type":"graph_assembly:brewing","primary":"ingredient","addition":{"item":"minecraft:potion"}}},
                {"id":"second","recipe":{"type":"graph_assembly:brewing","addition":{"item":"minecraft:redstone"}}}],
@@ -249,7 +252,7 @@ public final class NativeBrewingDefinitionGameTests {
     @GameTest(template = "test_empty", batch = "native_brewing")
     public static void tooltipCandidatesRespectActualBrewingRoles(GameTestHelper helper) {
         var level = helper.getLevel();
-        var graph = dev.graphassembly.core.GraphCodec.parse("test:brew_tooltip", JsonParser.parseString("""
+        var graph = dev.graphassembly.codec.GraphCodec.parse("test:brew_tooltip", JsonParser.parseString("""
             {"ingredient":{"item":"minecraft:sugar"},"transitional_item":"minecraft:nether_wart",
              "nodes":[{"id":"seed","start":true,"recipe":{"type":"graph_assembly:anvil"}},
               {"id":"bottle","recipe":{"type":"graph_assembly:brewing","addition":{"item":"minecraft:sugar"}},"workpiece_inputs":[{"item_input":1}]},
@@ -258,7 +261,7 @@ public final class NativeBrewingDefinitionGameTests {
              "edges":[{"from":"seed","to":"bottle"},{"from":"seed","to":"material"},{"from":"seed","to":"extension"}],"outputs":[]}
             """).getAsJsonObject());
         var state = progress(graph.id(), "seed");
-        var preflight = dev.graphassembly.core.GraphEngine.preflight(graph, state);
+        var preflight = dev.graphassembly.core.GraphPipeline.preflight(graph, state);
         java.util.function.Function<ItemStack, dev.graphassembly.client.view.WorkpieceTooltipRoles> show = stack ->
             dev.graphassembly.client.view.WorkpieceTooltipRoles.select(graph, state, preflight, level.potionBrewing(),
                 Workpiece.write(stack, state), id -> dev.graphassembly.integration.GraphPreviewRecipes.resolve(level, graph, graph.nodes().get(id)).value());
@@ -342,7 +345,7 @@ public final class NativeBrewingDefinitionGameTests {
     }
 
     private static Progress progress(String graph, String current) {
-        return new Progress(graph, "seed", current, Map.of(), List.of(), Map.of(), null, List.of(current));
+        return new Progress(graph, "seed", current, new MarkAccounting.State(Map.of(), Map.of()), List.of(), new RouteState(null, null), List.of(current));
     }
 
 

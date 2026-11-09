@@ -1,11 +1,13 @@
 package dev.graphassembly.client.view;
 
-import dev.graphassembly.core.GraphDefinition;
-import dev.graphassembly.core.WeightedOutput;
-import dev.graphassembly.core.CompletionRequirements;
-import dev.graphassembly.core.Node;
-import dev.graphassembly.core.OutputNode;
-import dev.graphassembly.core.OutputGroup;
+import dev.graphassembly.core.condition.checkpoint.CheckpointRequirement.CheckpointMode;
+import dev.graphassembly.core.condition.mark.MarkRequirement;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
+import dev.graphassembly.core.io.WeightedOutput;
+import dev.graphassembly.core.condition.ProgressRequirements;
+import dev.graphassembly.core.definition.basic.NodeDefinition;
+import dev.graphassembly.core.io.OutputNode;
+import dev.graphassembly.core.io.OutputGroup;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -19,18 +21,18 @@ public record SettlementDescription(List<WeightedOutput> outputs, List<Line> par
     }
     private static Line text(String key, Object... arguments) { return new Line(key, List.of(arguments)); }
 
-    public static SettlementDescription from(GraphDefinition graph) {
+    public static SettlementDescription from(GraphDefinition<?> graph) {
         var view = SettlementViewModel.from(graph);
         List<Line> lines = new ArrayList<>();
         lines.add(text("info.title"));
         for (var node : graph.nodes().values()) {
-            if (!node.finish()) continue;
+            if (!node.roles().finish()) continue;
             section(lines, text("finish", node.id()));
             var rules = view.rules().stream().filter(rule -> rule.effectiveFinishes().contains(node.id())).toList();
             for (var rule : rules) addRule(lines, rule, rules.size() > 1);
             if (rules.isEmpty()) lines.add(text("success.none"));
-            if (node.finishMode() == dev.graphassembly.core.FinishMode.STRICT)
-                addFailure(lines, node.scrapEntries());
+            if (node.settlement().finishMode() == dev.graphassembly.core.settlement.FinishMode.STRICT)
+                addFailure(lines, node.settlement().scrapEntries());
             else lines.add(text("lenient"));
         }
         var unused = view.rules().stream().filter(rule -> rule.effectiveFinishes().isEmpty()).toList();
@@ -38,13 +40,22 @@ public record SettlementDescription(List<WeightedOutput> outputs, List<Line> par
             section(lines, text("finish.none"));
             unused.forEach(rule -> addRule(lines, rule, true));
         }
-        if (graph.nodes().values().stream().anyMatch(node -> !node.workpieceInputs().isEmpty())) {
+        if (graph.nodes().values().stream().anyMatch(node -> !node.inputs().workpieceInputs().isEmpty())) {
             section(lines, text("info.inputs"));
             graph.nodes().values().forEach(node -> inputs(node).stream()
                 .filter(line -> !line.key().equals("input.primary_only")).forEach(lines::add));
             lines.add(text("input.primary_only"));
         }
-        boolean hasActions=graph.nodes().values().stream().anyMatch(node->!node.progressActions().isEmpty());
+        var conditionalEdges=graph.topology().edges().stream().filter(edge->!edge.requirements().equals(ProgressRequirements.NONE)).toList();
+        if(!conditionalEdges.isEmpty()) {
+            section(lines,text("edges.title"));
+            conditionalEdges.forEach(edge->{
+                lines.add(text("edge.requirements",edge.from(),edge.to()));
+                lines.addAll(edgeConditions(edge));
+            });
+            lines.add(text("edges.timing"));
+        }
+        boolean hasActions=graph.nodes().values().stream().anyMatch(node->!node.effects().mutations().isEmpty() || node.routing().redirect()!=null);
         if(hasActions) {
             section(lines,text("actions.title"));
             graph.nodes().values().forEach(node->lines.addAll(ProgressActionDescription.of(node)));
@@ -53,18 +64,19 @@ public record SettlementDescription(List<WeightedOutput> outputs, List<Line> par
         lines.add(text(hasActions ? "actions.timing" : "timing"));
         lines.add(text("requirements.and"));
         if (view.rules().stream().anyMatch(rule -> hasRanges(rule.condition().requirements()))
-                || graph.nodes().values().stream().flatMap(node -> node.workpieceInputs().stream())
-                    .anyMatch(role -> hasRanges(role.requirements()))) lines.add(text("requirements.ranges"));
-        if (graph.nodes().values().stream().filter(Node::finish).anyMatch(node ->
+                || graph.nodes().values().stream().flatMap(node -> node.inputs().workpieceInputs().stream())
+                    .anyMatch(role -> hasRanges(role.requirements()))
+                || graph.topology().edges().stream().anyMatch(edge->hasRanges(edge.requirements()))) lines.add(text("requirements.ranges"));
+        if (graph.nodes().values().stream().filter(node -> node.roles().finish()).anyMatch(node ->
                 view.rules().stream().filter(rule -> rule.effectiveFinishes().contains(node.id())).count() > 1))
             lines.add(text("merge"));
         if (view.rules().stream().anyMatch(rule -> weighted(rule.condition().entries()))
-                || graph.nodes().values().stream().filter(Node::finish).anyMatch(node -> weighted(node.scrapEntries()))
+                || graph.nodes().values().stream().filter(node -> node.roles().finish()).anyMatch(node -> weighted(node.settlement().scrapEntries()))
                 || lines.stream().anyMatch(line -> line.key().equals("merge"))) lines.add(text("weight_scope"));
         lines.add(text("info.graph", graph.id()));
         var outputs = new ArrayList<WeightedOutput>();
         view.rules().stream().filter(rule -> !rule.effectiveFinishes().isEmpty())
-            .forEach(rule -> outputs.addAll(rule.condition().results()));
+            .forEach(rule -> outputs.addAll(rule.condition().leaves()));
         view.failures().forEach(failure -> outputs.addAll(failure.scrap()));
         return new SettlementDescription(outputs, lines);
     }
@@ -75,8 +87,8 @@ public record SettlementDescription(List<WeightedOutput> outputs, List<Line> par
     private static boolean weighted(List<OutputNode> entries) {
         return entries.size() > 1 || entries.stream().anyMatch(entry -> entry instanceof OutputGroup || entry.weight() != 1);
     }
-    private static boolean hasRanges(CompletionRequirements requirements) {
-        return !requirements.markRanges().isEmpty() || !requirements.checkpointCounts().isEmpty();
+    private static boolean hasRanges(ProgressRequirements requirements) {
+        return !requirements.marks().ranges().isEmpty() || !requirements.checkpoints().counts().isEmpty();
     }
     private static void addRule(List<Line> lines, SettlementViewModel.Rule rule, boolean showSource) {
         if (showSource) lines.add(rule.sourceNode() == null ? text("source.graph", rule.number())
@@ -90,26 +102,26 @@ public record SettlementDescription(List<WeightedOutput> outputs, List<Line> par
         lines.add(text(requirements.isEmpty() ? "requirements.none" : "requirements.heading"));
         lines.addAll(requirements);
     }
-    private static void addRequirements(List<Line> lines, CompletionRequirements requirements) {
-        var marks = requirements.marks();
+    private static void addRequirements(List<Line> lines, ProgressRequirements requirements) {
+        var marks = requirements.marks().match();
         if (marks != null) {
             if (!marks.values().isEmpty()) lines.add(text("marks." + marks.mode().name().toLowerCase(Locale.ROOT), markValues(marks.values())));
-            else if (marks.mode() == dev.graphassembly.core.MarkRequirement.Mode.EXACT) lines.add(text("marks.exact.empty"));
+            else if (marks.mode() == MarkRequirement.Mode.EXACT) lines.add(text("marks.exact.empty"));
         }
-        var checkpoints = requirements.checkpoints();
+        var checkpoints = requirements.checkpoints().match();
         if (checkpoints != null && (!checkpoints.nodes().isEmpty()
-                || checkpoints.mode() == dev.graphassembly.core.CheckpointMode.EXACT)) {
+                || checkpoints.mode() == CheckpointMode.EXACT)) {
             String mode = checkpoints.mode().name().toLowerCase(Locale.ROOT);
             lines.add(text("checkpoints." + mode + (checkpoints.nodes().isEmpty() ? ".empty" : "")));
             if (!checkpoints.nodes().isEmpty()) {
-                boolean unordered = checkpoints.mode() == dev.graphassembly.core.CheckpointMode.UNORDERED;
+                boolean unordered = checkpoints.mode() == CheckpointMode.UNORDERED;
                 var nodes = unordered ? checkpoints.nodes().stream().distinct().toList() : checkpoints.nodes();
                 lines.add(text("checkpoints.sequence", String.join(unordered ? ", " : " → ", nodes)));
             }
         }
-        new java.util.TreeMap<>(requirements.markRanges()).forEach((key, range) ->
+        new java.util.TreeMap<>(requirements.marks().ranges()).forEach((key, range) ->
             lines.add(text("mark_range", key, range.min(), upper(range.max()))));
-        new java.util.TreeMap<>(requirements.checkpointCounts()).forEach((key, range) ->
+        new java.util.TreeMap<>(requirements.checkpoints().counts()).forEach((key, range) ->
             lines.add(text("checkpoint_count", key, range.min(), upper(range.max()))));
     }
     private static Object upper(int maximum) { return maximum == Integer.MAX_VALUE ? "∞" : maximum; }
@@ -118,9 +130,14 @@ public record SettlementDescription(List<WeightedOutput> outputs, List<Line> par
             .map(entry -> entry.getKey() + " × " + entry.getValue())
             .collect(java.util.stream.Collectors.joining(", "));
     }
-    public static List<Line> inputs(Node node) {
+    public static List<Line> edgeConditions(dev.graphassembly.core.definition.basic.Edge edge) {
+        var lines=new ArrayList<Line>();
+        addRequirements(lines,edge.requirements());
+        return List.copyOf(lines);
+    }
+    public static List<Line> inputs(NodeDefinition<?> node) {
         List<Line> lines = new ArrayList<>();
-        for (var role : node.workpieceInputs()) {
+        for (var role : node.inputs().workpieceInputs()) {
             lines.add(text("input.role", node.id(), role.itemInput()));
             if (!role.currentNodes().isEmpty()) lines.add(text("input.current", String.join(", ", role.currentNodes())));
             addRequirements(lines, role.requirements());
@@ -159,8 +176,8 @@ public record SettlementDescription(List<WeightedOutput> outputs, List<Line> par
                 String key = "tree." + group.mode().name().toLowerCase(Locale.ROOT);
                 lines.add(atDepth(depth, showWeight ? text(key, path, group.weight()) : text(key + ".plain", path)));
                 if (group.chance() != 1) lines.add(atDepth(depth, text("chance.group", percent(group.chance()))));
-                if (group.results().isEmpty()) lines.add(atDepth(depth + 1, text("tree.empty")));
-                addTree(lines, group.results(), path, depth + 1, group.mode() == OutputGroup.Mode.WEIGHTED, false);
+                if (group.children().isEmpty()) lines.add(atDepth(depth + 1, text("tree.empty")));
+                addTree(lines, group.children(), path, depth + 1, group.mode() == OutputGroup.Mode.WEIGHTED, false);
             }
         }
     }

@@ -7,7 +7,6 @@ import com.simibubi.create.content.kinetics.press.*;
 import com.simibubi.create.content.fluids.spout.FillingBySpout;
 import com.simibubi.create.content.logistics.filter.FilterItemStack;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.*;
 import dev.graphassembly.filter.FilterSelection;
 import dev.graphassembly.integration.*;
 import dev.graphassembly.recipe.*;
@@ -54,7 +53,7 @@ public final class GraphGameTests {
             var results = found.orElseThrow().value().rollResults(level.random);
             var piece = results.getFirst();
             check(piece.is(Items.IRON_NUGGET) && piece.getMaxStackSize() == 1, "Workpiece must be intermediate and unstackable");
-            check(Workpiece.read(piece).lockedNext().equals("cut"), "Random branch must persist chosen target");
+            check(Workpiece.read(piece).routing().lockedNext().equals("cut"), "Random branch must persist chosen target");
             var restored = ItemStack.parse(level.registryAccess(), piece.save(level.registryAccess())).orElseThrow();
             check(Workpiece.read(piece).equals(Workpiece.read(restored)), "Progress component must survive NBT round trip");
             check(press.getRecipe(restored).isEmpty(), "Wrong native operation must stop");
@@ -69,7 +68,7 @@ public final class GraphGameTests {
             check(finalItem.is(Items.DIAMOND) && !Workpiece.has(finalItem), "Finish must settle and remove graph ownership");
             manager.replaceRecipes(List.of()); GraphIndex.invalidate();
             check(press.getRecipe(piece).isEmpty() && GraphRuntime.problem(level, piece).contains("Missing graph"), "Missing graph must halt without resetting");
-            check(Workpiece.read(piece).lockedNext().equals("cut"), "Reload cannot reroll or erase lock");
+            check(Workpiece.read(piece).routing().lockedNext().equals("cut"), "Reload cannot reroll or erase lock");
 
             var strict = recipe("""
                 [{"id":"single","start":true,"finish":true,"finish_mode":"strict","recipe":{"type":"create:pressing",

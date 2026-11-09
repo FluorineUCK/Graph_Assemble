@@ -4,15 +4,15 @@ ServerEvents.recipes(function (event) {
     var graph = GraphAssembly.create('minecraft:iron_nugget')
         .ingredient({ item: 'minecraft:gold_ingot' })
         .node('body', { type: 'create:pressing' }, {
-            start: true, rewards: { quality: 2 }
+            start: true, mark_amounts: { quality: 2 }
         })
         .node('insert', { type: 'create:cutting', processing_time: 40 }, {
             start: true, ingredient: { item: 'minecraft:amethyst_shard' },
-            rewards: { quality: 99 }
+            mark_amounts: { quality: 99 }
         })
         .node('polish', {
             type: 'create:deploying', ingredients: [{ item: 'minecraft:quartz' }]
-        }, { checkpoint: true, rewards: { quality: 2 } })
+        }, { checkpoint: true, mark_amounts: { quality: 2 } })
         .node('join', {
             type: 'create:mixing', ingredients: [{ item: 'minecraft:iron_nugget' }]
         }, {

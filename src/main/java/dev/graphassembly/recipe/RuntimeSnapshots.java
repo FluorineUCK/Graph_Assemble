@@ -1,7 +1,9 @@
 package dev.graphassembly.recipe;
 
+import dev.graphassembly.codec.ProgressCodec;
+import dev.graphassembly.core.progress.Progress;
+
 import com.google.gson.JsonParser;
-import dev.graphassembly.core.Progress;
 import dev.graphassembly.diagnostics.PerformanceMetrics;
 import dev.graphassembly.filter.FilterConfiguration;
 import dev.graphassembly.filter.FilterSelection;
@@ -21,19 +23,19 @@ public final class RuntimeSnapshots {
     public static void release(RecipeManager owner) { CACHE.release(owner); }
     private static Progress parseProgress(String json) {
         PerformanceMetrics.workpieceParse();
-        return Progress.fromJson(JsonParser.parseString(json).getAsJsonObject());
+        return ProgressCodec.fromJson(JsonParser.parseString(json).getAsJsonObject());
     }
     private static FilterSelection parseFilter(String json) {
         return FilterSelection.fromConfiguration(FilterConfiguration.parse(json));
     }
     private static long string(String value) { return value == null ? 0 : 48L + 2L * value.length(); }
     private static long progressWeight(String key, Progress p) {
-        long bytes = 256 + string(key) + string(p.graphId()) + string(p.entry()) + string(p.current()) + string(p.lockedNext());
-        if (p.pendingRoute()!=null) bytes += 32 + string(p.pendingRoute().node()) + string(p.pendingRoute().from());
+        long bytes = 256 + string(key) + string(p.graphId()) + string(p.entry()) + string(p.current()) + string(p.routing().lockedNext());
+        if (p.routing().pendingRoute()!=null) bytes += 32 + string(p.routing().pendingRoute().node()) + string(p.routing().pendingRoute().from());
         for (var id : p.checkpoints()) bytes += 24 + string(id);
-        for (var id : p.history()) bytes += 24 + string(id);
-        for (var mark : p.marks().entrySet()) bytes += 96 + string(mark.getKey());
-        for (var reward : p.rewardCounts().entrySet()) bytes += 96 + string(reward.getKey());
+        for (var id : p.recentHistory()) bytes += 24 + string(id);
+        for (var mark : p.marks().values().entrySet()) bytes += 96 + string(mark.getKey());
+        for (var grant : p.marks().grantCounts().entrySet()) bytes += 96 + string(grant.getKey());
         return bytes;
     }
     private static long filterWeight(String key, FilterSelection f) {

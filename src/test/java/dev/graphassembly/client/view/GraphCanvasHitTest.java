@@ -1,6 +1,6 @@
 package dev.graphassembly.client.view;
 
-import dev.graphassembly.core.Edge;
+import dev.graphassembly.core.definition.basic.Edge;
 import dev.graphassembly.client.view.GraphProjection.Projected;
 import dev.graphassembly.client.view.NodePresentation.*;
 import org.junit.jupiter.api.Test;

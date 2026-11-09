@@ -1,5 +1,8 @@
 package dev.graphassembly.integration;
 
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.integration.sequence.NativeSequences;
+
 import com.simibubi.create.content.kinetics.mixer.MechanicalMixerBlockEntity;
 import com.simibubi.create.content.kinetics.press.MechanicalPressBlockEntity;
 import com.simibubi.create.content.processing.basin.BasinBlock;
@@ -8,7 +11,6 @@ import com.simibubi.create.content.processing.basin.BasinOperatingBlockEntity;
 import com.simibubi.create.content.processing.basin.BasinRecipe;
 import com.simibubi.create.foundation.blockEntity.behaviour.fluid.SmartFluidTankBehaviour;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.GraphEngine;
 import dev.graphassembly.filter.GraphFilterItem;
 import dev.graphassembly.recipe.GraphIndex;
 import dev.graphassembly.recipe.Workpiece;
@@ -31,21 +33,21 @@ public final class BasinGraphRuntime {
     private static final java.util.Map<Recipe<?>,java.lang.ref.WeakReference<BasinOperatingBlockEntity>> MACHINES=
         java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
     public record Lookup(boolean handled,List<Recipe<?>> recipes) {}
-    private record Plan(IItemHandler items,IFluidHandler fluids,int[] itemCounts,int[] fluidCounts,List<ItemStack> remainders) {}
+    private record Plan(IItemHandler items,IFluidHandler fluids,int[] itemCounts,int[] fluidCounts,List<ItemStack> remainders,GraphOutputs.Prepared prepared) {}
     private record Place(net.minecraft.world.level.Level level,net.minecraft.core.BlockPos pos) {}
-    private static final java.util.Map<Place,CommitScope> COMMITS=new java.util.HashMap<>();
+    private static final MachineScopes<CommitScope> COMMITS=new MachineScopes<>(scope->scope.invalid=true);
     private static final class CommitScope implements AutoCloseable {
         private final Place place;private boolean invalid;
-        private CommitScope(Place place){this.place=place;}
+        private final MachineScopes<CommitScope>.Token token;
+        private CommitScope(Place place,MachineScopes<CommitScope>.Token token){this.place=place;this.token=token;}
         static CommitScope enter(BasinBlockEntity basin) {
-            var place=new Place(basin.getLevel(),basin.getBlockPos().immutable());var active=COMMITS.get(place);
-            if(active!=null){active.invalid=true;return null;}
-            var scope=new CommitScope(place);COMMITS.put(place,scope);return scope;
+            return COMMITS.enter(basin.getLevel(),basin.getBlockPos(),token->
+                new CommitScope(new Place(basin.getLevel(),basin.getBlockPos().immutable()),token));
         }
-        @Override public void close(){COMMITS.remove(place);}
+        @Override public void close(){token.close();}
     }
     private static List<Boolean> policy(BasinRecipe recipe,GraphOperation operation) {
-        if(!dev.graphassembly.integration.crafting.CraftingDefinition.SERIALIZERS.contains(operation.node().recipe().get("type").getAsString()))return List.of();
+        if(!dev.graphassembly.integration.vanilla.crafting.CraftingDefinition.SERIALIZERS.contains(operation.node().operation().recipe().get("type").getAsString()))return List.of();
         var config=com.simibubi.create.infrastructure.config.AllConfigs.server().recipes;
         return recipe.getType()==com.simibubi.create.AllRecipeTypes.MIXING.getType()
             ?List.of(config.allowShapelessInMixer.get(),config.allowShapedSquareInPress.get()):List.of(config.allowShapedSquareInPress.get());
@@ -98,18 +100,18 @@ public final class BasinGraphRuntime {
         var sourceTypes=CreateNativeRecipes.sourceTypes(type);
         for(int slot=0;slot<items.getSlots();slot++) {
             var input=items.getStackInSlot(slot);
-            if(input.isEmpty() || input.has(com.simibubi.create.AllDataComponents.SEQUENCED_ASSEMBLY)) continue;
+            if(input.isEmpty() || input.has(com.simibubi.create.AllDataComponents.SEQUENCED_ASSEMBLY)&&!NativeSequences.currentStep(level,input)) continue;
             try {
                 var progress=Workpiece.read(level,input);
                 List<GraphIndex.Entry> entries=new ArrayList<>();
-                if(progress==null)for(var source:sourceTypes)entries.addAll(index.entries(source));
+                if(progress==null)for(var source:sourceTypes)entries.addAll(NativeSequences.entries(level,index,source));
                 else {
                     var graph=index.graphs().get(progress.graphId());
                     if(graph==null) continue;
-                    for(String id:GraphEngine.allowed(graph,progress)) entries.add(new GraphIndex.Entry(graph,graph.nodes().get(id),null));
+                    for(String id:GraphPipeline.allowed(graph,progress)) entries.add(new GraphIndex.Entry(graph,graph.nodes().get(id),null));
                 }
                 for(var entry:entries) {
-                    var nativeType=index.nativeType(entry.graph().id(),entry.node().id());
+                    var nativeType=NativeSequences.type(level,index,entry);
                     if(!sourceTypes.contains(nativeType)) continue;
                     if(progress==null && !entry.ingredient().test(input)) continue;
                     if(!WorkpieceInputs.matches(level,entry.graph(),entry.node(),0,input)) continue;
@@ -149,7 +151,7 @@ public final class BasinGraphRuntime {
         return ItemInputBinding.bind(recipe.getIngredients(),stacks,
             (role,stack)->(role!=0 || operation.matchesPrimary(level,stack))
                 && WorkpieceInputs.matches(level,operation.graph(),operation.node(),role,stack),
-            role->role==0 || operation.node().workpieceInput(role)!=null);
+            role->role==0 || operation.node().inputs().workpieceInput(role)!=null);
     }
 
     public static boolean match(BasinBlockEntity basin,BasinRecipe recipe,GraphOperation operation) {
@@ -203,11 +205,12 @@ public final class BasinGraphRuntime {
                 if(!remainder.isEmpty()) for(int unit=0;unit<Math.min(stack.getCount(),recipe.getIngredients().size());unit++) tail.add(remainder.copy());
             }
         } else tail.addAll(remainders);
-        if (!GraphOutputs.allPrimaryOutcomesFit(level, operation, primary -> {
+        var prepared=GraphOutputs.prepare(level,operation,recipe);
+        if (!prepared.primary().allMaximalOutcomesFit(primary -> {
             var worst = new ArrayList<>(primary); worst.addAll(tail);
             return fits(basin, worst);
         })) return null;
-        return new Plan(items,fluids,itemCounts,fluidCounts,remainders);
+        return new Plan(items,fluids,itemCounts,fluidCounts,remainders,prepared);
     }
 
     private static boolean fits(BasinBlockEntity basin,List<ItemStack> outputs) {
@@ -254,7 +257,7 @@ public final class BasinGraphRuntime {
         if(binding.status()!=InputAssignment.Status.UNIQUE) return false;
         var plan=plan(basin,recipe,operation,binding.slots());
         if(plan==null||!baseline.current(scope,recipe,operation))return false;
-        var prepared=GraphOutputs.prepare(level,operation,recipe);
+        var prepared=plan.prepared();
         if(!CreateNativeRecipes.basinAdmitted(level,operation,recipe.getType())||!operation.current(level)
             ||!prepared.outputsEnabled(level)||!baseline.current(scope,recipe,operation))return false;
         if(simulate) return true;

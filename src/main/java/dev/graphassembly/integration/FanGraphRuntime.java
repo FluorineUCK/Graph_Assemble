@@ -1,8 +1,10 @@
 package dev.graphassembly.integration;
 
+import dev.graphassembly.recipe.OperationSpec;
+
 import com.simibubi.create.content.kinetics.fan.processing.*;
-import dev.graphassembly.integration.furnace.*;
-import dev.graphassembly.core.GraphDefinition;
+import dev.graphassembly.integration.vanilla.furnace.*;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
 import dev.graphassembly.recipe.Workpiece;
 import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
 import com.simibubi.create.content.kinetics.belt.behaviour.TransportedItemStackHandlerBehaviour.TransportedResult;
@@ -19,7 +21,7 @@ import java.util.function.*;
 public final class FanGraphRuntime {
     private FanGraphRuntime() {}
     private static final ThreadLocal<Deque<Scope>> CALLS=ThreadLocal.withInitial(ArrayDeque::new);
-    private record Timer(String job,ItemStack input,GraphDefinition definition,boolean completed,java.lang.ref.WeakReference<Level> world) {}
+    private record Timer(String job,ItemStack input,GraphDefinition<OperationSpec> definition,boolean completed,java.lang.ref.WeakReference<Level> world) {}
     // Identity metadata only, never an authorization/settlement plan. Weak actor keys cannot be
     // retained by the values (including indirectly through a strong reference to the world).
     private static final Map<Object,Timer> TIMERS=Collections.synchronizedMap(new WeakHashMap<>());
@@ -30,7 +32,7 @@ public final class FanGraphRuntime {
         private final BooleanSupplier attached;
         private final ItemStack input;
         private final List<RecipeHolder<?>> definitions;
-        private CookingLookup.Selection selected;
+        private Selection selected;
         private FanProcessingType type;
         private String job="";
         private boolean invalid,restart,lockedOutput,completed,aborted;
@@ -56,7 +58,7 @@ public final class FanGraphRuntime {
                 restart=!selected.handled()&&old!=null&&!lockedOutput;
                 return;
             }
-            job=CookingLookup.identity(level,selected,input);
+            job=CookingLookup.identity(level,selected.operation(),input);
             var graph=selected.operation().graph();
             String saved=old==null?"":old.job;
             if(key instanceof ItemEntity entity) {
@@ -115,19 +117,30 @@ public final class FanGraphRuntime {
         } catch(RuntimeException preparationFailure){scope.invalid=true;}
         return scope;
     }
-    private static CookingLookup.Selection select(Level level,ItemStack input,FanProcessingType type) {
-        boolean protectedInput=Workpiece.has(input);
+    private record Selection(boolean handled,GraphOperation operation,com.simibubi.create.content.processing.recipe.ProcessingRecipe<?,?> processing) {}
+    private static Selection select(Level level,ItemStack input,FanProcessingType type) {
+        if(type==AllFanProcessingTypes.SPLASHING) {
+            var lookup=GraphRuntime.lookup(level,input,com.simibubi.create.AllRecipeTypes.SPLASHING.getType(),SplashingRecipe.class,r->true);
+            var recipe=lookup.first().map(RecipeHolder::value).orElse(null);
+            return new Selection(lookup.handled(),recipe==null?null:GraphOperation.get(recipe),recipe);
+        }
+        if(type==AllFanProcessingTypes.HAUNTING) {
+            var lookup=GraphRuntime.lookup(level,input,com.simibubi.create.AllRecipeTypes.HAUNTING.getType(),HauntingRecipe.class,r->true);
+            var recipe=lookup.first().map(RecipeHolder::value).orElse(null);
+            return new Selection(lookup.handled(),recipe==null?null:GraphOperation.get(recipe),recipe);
+        }
+        boolean protectedInput=dev.graphassembly.integration.sequence.NativeSequences.tracked(input);
         for(var source:CreateNativeRecipes.fanSources(type)) {
             var selected=CookingLookup.select(level,input,source,(operation,recipe)->CreateNativeRecipes.fanAdmitted(level,type,operation,recipe));
-            if(selected.operation()!=null)return selected;
+            if(selected.operation()!=null)return new Selection(selected.handled(),selected.operation(),null);
             // Ambiguity protects even raw input. A progressing piece may simply target the
             // second native source (blasting rather than smelting), so finish routing first.
-            if(selected.handled()&&!protectedInput)return selected;
+            if(selected.handled()&&!protectedInput)return new Selection(selected.handled(),selected.operation(),null);
             if(!protectedInput&&level.getRecipeManager().getRecipeFor(source,new SingleRecipeInput(input),level)
                 .filter(com.simibubi.create.AllRecipeTypes.CAN_BE_AUTOMATED).isPresent())
-                return new CookingLookup.Selection(false,null,null);
+                return new Selection(false,null,null);
         }
-        return new CookingLookup.Selection(protectedInput,null,null);
+        return new Selection(protectedInput,null,null);
     }
     /** null delegates to ordinary upstream eligibility. */
     public static Boolean eligible() {
@@ -141,7 +154,9 @@ public final class FanGraphRuntime {
         if(scope==null||!scope.selected.handled())return null;
         try {
             if(!scope.allowed())return null;
-            var prepared=CookingCompletion.prepare(scope.level,scope.selected.operation());
+            var prepared=scope.selected.processing()==null
+                ? new GraphOutputs.Prepared(OperationCompletion.prepare(scope.level,scope.selected.operation()),List.of())
+                : GraphOutputs.prepare(scope.level,scope.selected.operation(),scope.selected.processing());
             if(!prepared.outputsEnabled(scope.level)||!scope.current()){scope.aborted=true;return null;}
             var outputs=new ArrayList<ItemStack>();
             for(int unit=0;unit<scope.input.getCount();unit++)outputs.addAll(prepared.roll(scope.level.random));

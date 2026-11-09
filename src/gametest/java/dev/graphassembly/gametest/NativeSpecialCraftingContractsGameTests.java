@@ -3,7 +3,7 @@ package dev.graphassembly.gametest;
 import com.google.gson.JsonParser;
 import dev.graphassembly.GraphAssembly;
 import dev.graphassembly.integration.*;
-import dev.graphassembly.integration.crafting.SpecialCraftingDefinition;
+import dev.graphassembly.integration.vanilla.crafting.SpecialCraftingDefinition;
 import dev.graphassembly.recipe.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
@@ -105,7 +105,7 @@ public final class NativeSpecialCraftingContractsGameTests {
             }
             try(var s=new Session(h,new GraphRecipe(json),new RecipeHolder<>(nativeId,subclass))) {check(!GraphIndex.get(h.getLevel()).graphs().containsKey(ID.toString()),"Referenced subclass rejected before codec erases subtype");}
             var override=graph(type,false).json();override.getAsJsonArray("nodes").get(0).getAsJsonObject().addProperty("transitional_item","minecraft:gold_ingot");
-            try(var s=new Session(h,new GraphRecipe(override))) {check(!GraphIndex.get(h.getLevel()).graphs().containsKey(ID.toString()),"Node carrier override forbidden for special crafting");}
+            try(var s=new Session(h,new GraphRecipe(override))) {check(!GraphIndex.get(h.getLevel()).graphs().containsKey(ID.toString()),"NodeDefinition carrier override forbidden for special crafting");}
         }h.succeed();
     }
 

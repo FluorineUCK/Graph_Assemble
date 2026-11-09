@@ -1,9 +1,11 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.progress.TransitionResult;
+
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.GraphEngine;
 import dev.graphassembly.integration.GraphPreviewRecipes;
 import dev.graphassembly.integration.PreviewRecipeData;
 import dev.graphassembly.recipe.*;
@@ -118,17 +120,17 @@ public final class NativeTrimGameTests {
         for(int auxiliary:List.of(1,2)) {
             var json=graph("[{\"item\":\"minecraft:diamond\"}]",false).json();var nodes=json.getAsJsonArray("nodes");
             var trim=nodes.get(0).getAsJsonObject();trim.remove("start");trim.add("workpiece_inputs",JsonParser.parseString("[{\"item_input\":0,\"current_nodes\":[\"body\"]},{\"item_input\":"+auxiliary+",\"current_nodes\":[\"insert\"],\"requirements\":{\"mark_ranges\":{\"quality\":{\"min\":90}}}}]"));
-            nodes.add(JsonParser.parseString("{\"id\":\"body\",\"start\":true,\"transitional_item\":\"minecraft:diamond_chestplate\",\"rewards\":{\"quality\":3},\"recipe\":{\"type\":\"create:pressing\"}}"));
+            nodes.add(JsonParser.parseString("{\"id\":\"body\",\"start\":true,\"transitional_item\":\"minecraft:diamond_chestplate\",\"mark_amounts\":{\"quality\":3},\"recipe\":{\"type\":\"create:pressing\"}}"));
             String auxiliaryItem=auxiliary==1?"minecraft:coast_armor_trim_smithing_template":"minecraft:amethyst_shard";
-            nodes.add(JsonParser.parseString("{\"id\":\"insert\",\"start\":true,\"ingredient\":{\"item\":\"minecraft:quartz\"},\"transitional_item\":\""+auxiliaryItem+"\",\"checkpoint\":true,\"rewards\":{\"quality\":99},\"recipe\":{\"type\":\"create:cutting\"}}"));
+            nodes.add(JsonParser.parseString("{\"id\":\"insert\",\"start\":true,\"ingredient\":{\"item\":\"minecraft:quartz\"},\"transitional_item\":\""+auxiliaryItem+"\",\"checkpoint\":true,\"mark_amounts\":{\"quality\":99},\"recipe\":{\"type\":\"create:cutting\"}}"));
             json.getAsJsonArray("edges").add(JsonParser.parseString("{\"from\":\"body\",\"to\":\"trim\"}"));json.getAsJsonArray("edges").add(JsonParser.parseString("{\"from\":\"insert\",\"to\":\"trim\"}"));
             var graph=new GraphRecipe(json);var definition=graph.definition(ID.toString());int physical=auxiliary==1?0:2;
-            var main=Workpiece.write(new ItemStack(Items.DIAMOND_CHESTPLATE),GraphEngine.complete(definition,null,"body","minecraft:diamond_chestplate",()->0).state());
-            var extra=Workpiece.write(dev.graphassembly.integration.NativeSteps.stack(auxiliaryItem),GraphEngine.complete(definition,null,"insert","minecraft:quartz",()->0).state());
+            var main=Workpiece.write(new ItemStack(Items.DIAMOND_CHESTPLATE),((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(definition, null, "body", "minecraft:diamond_chestplate"), ()->0)).progress());
+            var extra=Workpiece.write(dev.graphassembly.integration.NativeSteps.stack(auxiliaryItem),((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(definition, null, "insert", "minecraft:quartz"), ()->0)).progress());
             try(var s=new Session(helper,graph)) {
                 s.fill(main,1);s.menu.getSlot(physical).set(extra.copy());s.click(ClickType.PICKUP,0);var result=s.menu.getCarried();var state=Workpiece.read(helper.getLevel(),result);
-                check(result.is(Items.DIAMOND_CHESTPLATE)&&result.has(DataComponents.TRIM)&&state!=null&&state.current().equals("trim")&&state.marks().get("quality")==3
-                    &&state.history().equals(List.of("body","trim"))&&!state.checkpoints().contains("insert")&&s.counts(0),"Native trim role"+auxiliary+" validates a second workpiece but only the armor's history/marks advance");
+                check(result.is(Items.DIAMOND_CHESTPLATE)&&result.has(DataComponents.TRIM)&&state!=null&&state.current().equals("trim")&&state.marks().values().get("quality")==3
+                    &&state.recentHistory().equals(List.of("body","trim"))&&!state.checkpoints().contains("insert")&&s.counts(0),"Native trim role"+auxiliary+" validates a second workpiece but only the armor's history/marks advance");
                 for(boolean foreign:List.of(false,true)) {
                     s.reset();s.fill(main,1);var bad=foreign?extra.copy():dev.graphassembly.integration.NativeSteps.stack(auxiliaryItem);
                     if(foreign)bad.set(GraphAssembly.PROGRESS.get(),bad.get(GraphAssembly.PROGRESS.get()).replace(ID.toString(),"test:foreign_trim"));
@@ -158,12 +160,12 @@ public final class NativeTrimGameTests {
         json.add("edges",JsonParser.parseString("[{\"from\":\"trim\",\"to\":\"a\"},{\"from\":\"trim\",\"to\":\"b\"}]"));
         try(var s=new Session(helper,new GraphRecipe(json))) {
             s.fill(new ItemStack(TrimNativeFixture.ITEM),1);int[] branches={0};TrimNativeFixture.limit=stack->{
-                var state=Workpiece.read(helper.getLevel(),stack);if(state!=null&&"b".equals(state.lockedNext())){branches[0]++;return 0;}return 64;
+                var state=Workpiece.read(helper.getLevel(),stack);if(state!=null&&"b".equals(state.routing().lockedNext())){branches[0]++;return 0;}return 64;
             };
             var random=helper.getLevel().random;random.setSeed(31905);long expected=random.nextLong();random.setSeed(31905);s.click(ClickType.PICKUP,0);
             check(branches[0]>0&&s.counts(1)&&s.menu.getCarried().isEmpty()&&random.nextLong()==expected,"Every random locked-next carrier uses native item/components for preflight, including an unplaceable alternate branch");
             TrimNativeFixture.reset();s.click(ClickType.PICKUP,0);var result=s.menu.getCarried();var state=Workpiece.read(helper.getLevel(),result);
-            check(s.counts(0)&&result.is(TrimNativeFixture.ITEM)&&result.has(DataComponents.TRIM)&&state!=null&&List.of("a","b").contains(state.lockedNext()),"Restored capacity commits one native dynamic carrier with one legal random successor");
+            check(s.counts(0)&&result.is(TrimNativeFixture.ITEM)&&result.has(DataComponents.TRIM)&&state!=null&&List.of("a","b").contains(state.routing().lockedNext()),"Restored capacity commits one native dynamic carrier with one legal random successor");
         }finally{TrimNativeFixture.reset();}
         helper.succeed();
     }
@@ -318,7 +320,7 @@ public final class NativeTrimGameTests {
                 &&Objects.equals(result.get(DataComponents.TRIM),expected.get(DataComponents.TRIM)),
                 "Native armor damage, custom name, enchantments and actual assembled trim survive graph progression");
             var progress=Workpiece.read(level,result);
-            check(progress!=null&&progress.graphId().equals(id.toString())&&progress.current().equals("trim")&&progress.history().equals(List.of("trim")),
+            check(progress!=null&&progress.graphId().equals(id.toString())&&progress.current().equals("trim")&&progress.recentHistory().equals(List.of("trim")),
                 "The native base owns exactly one new graph step, not an auxiliary or finish settlement");
             check(preview.is(Items.DIAMOND_CHESTPLATE)&&preview.has(DataComponents.TRIM)&&Workpiece.has(preview),
                 "The nonauthoritative preview uses the same native armor carrier and trim");

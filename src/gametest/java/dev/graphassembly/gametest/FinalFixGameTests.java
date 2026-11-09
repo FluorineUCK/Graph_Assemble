@@ -1,12 +1,15 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.condition.mark.MarkAccounting;
+import dev.graphassembly.core.progress.Progress;
+import dev.graphassembly.core.route.RouteState;
+
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.content.processing.recipe.ProcessingRecipe;
 import dev.graphassembly.GraphAssembly;
 import dev.graphassembly.client.StepDescription;
-import dev.graphassembly.core.Progress;
 import dev.graphassembly.integration.GraphRuntime;
 import dev.graphassembly.recipe.GraphIndex;
 import dev.graphassembly.recipe.GraphRecipe;
@@ -45,12 +48,11 @@ public final class FinalFixGameTests {
                    "nodes":[{"id":"body","start":true,"recipe":{"type":"create:pressing"}},
                      {"id":"condition","recipe":{"type":"create:cutting","processing_time":20},
                       "workpiece_inputs":[{"item_input":0,"current_nodes":["body"],"requirements":{"mark_ranges":{"quality":{"min":2}}}}]},
-                     {"id":"overflow","recipe":{"type":"create:pressing"},"rewards":{"load":1}},
+                     {"id":"overflow","recipe":{"type":"create:pressing"},"mark_amounts":{"load":1}},
                      {"id":"safe","recipe":{"type":"create:milling","processing_time":20}}],"edges":[%s]}
                   """.formatted(edges)).getAsJsonObject());
                 manager.replaceRecipes(List.of(new RecipeHolder<>(ResourceLocation.parse("test:diagnostic"), graph))); GraphIndex.invalidate();
-                var state = new Progress("test:diagnostic", "body", "body", Map.of("quality",1,"load",Integer.MAX_VALUE),
-                    List.of("body"), Map.of(), null, List.of("body"));
+                var state = new Progress("test:diagnostic", "body", "body", new MarkAccounting.State(Map.of("quality",1,"load",Integer.MAX_VALUE), Map.of()), List.of("body"), new RouteState(null, null), List.of("body"));
                 var diagnostic = GraphRuntime.diagnostic(helper.getLevel(), state);
                 if (mode==3) check(diagnostic==null, "An allowed sibling operation must not stop the workpiece");
                 else {

@@ -1,5 +1,11 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.condition.mark.MarkAccounting;
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.progress.Progress;
+import dev.graphassembly.core.progress.TransitionResult;
+import dev.graphassembly.core.route.RouteState;
+
 import com.google.gson.JsonParser;
 import dev.graphassembly.GraphAssembly;
 import dev.graphassembly.recipe.*;
@@ -115,7 +121,7 @@ public final class NativeCrafterContractsGameTests {
             s.tick();check(s.count(Items.GOLD_INGOT)==1&&s.machine.getItem(0).getCount()==2,"No graph preserves ordinary machine execution");
             manager.replaceRecipes(List.of(ordinary,new RecipeHolder<>(ResourceLocation.parse("test:crafter_contract"),graph(SINGLE,"[{\"item\":\"minecraft:diamond\"}]",false))));GraphIndex.invalidate();
             s.tick();check(s.count(Items.IRON_NUGGET)==1&&s.count(Items.GOLD_INGOT)==1,"Graph entrance wins ordinary collision even after cache warmup");
-            s.machine.setItem(0,Workpiece.write(new ItemStack(Items.IRON_INGOT),new dev.graphassembly.core.Progress("test:missing","s","s",Map.of(),List.of(),Map.of(),null,List.of("s"))));
+            s.machine.setItem(0,Workpiece.write(new ItemStack(Items.IRON_INGOT),new Progress("test:missing", "s", "s", new MarkAccounting.State(Map.of(), Map.of()), List.of(), new RouteState(null, null), List.of("s"))));
             check(net.minecraft.world.level.block.CrafterBlock.getPotentialResults(h.getLevel(),s.machine.asCraftInput()).isEmpty(),"Static cache rejects progress-bearing ordinary match");
             s.tick();check(Workpiece.has(s.machine.getItem(0))&&s.count(Items.GOLD_INGOT)==1,"Invalid progress must not ordinary-fallback");
         }h.succeed();
@@ -141,7 +147,7 @@ public final class NativeCrafterContractsGameTests {
         }
         for(String outputs:List.of("[]","[{\"item\":\"minecraft:diamond\",\"chance\":0}]")) {
             var data=graph(SINGLE,outputs,true).json();
-            // GraphEngine's existing default is LENIENT: no pool keeps a carrier, not settlement.
+            // GraphPipeline's existing default is LENIENT: no pool keeps a carrier, not settlement.
             // An intentionally empty settlement therefore uses the existing STRICT finish policy.
             if(outputs.equals("[]"))data.getAsJsonArray("nodes").get(0).getAsJsonObject().addProperty("finish_mode","strict");
             try(var s=new Session(h,new GraphRecipe(data))) {
@@ -203,8 +209,8 @@ public final class NativeCrafterContractsGameTests {
     public static void twoMachineWorkpiecesInheritOnlyPrimaryAndRejectInvalidAuxiliary(GameTestHelper h) {
         var g=new GraphRecipe(JsonParser.parseString("""
             {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
-             "nodes":[{"id":"body","start":true,"rewards":{"quality":3},"recipe":{"type":"create:pressing"}},
-              {"id":"insert","start":true,"ingredient":{"item":"minecraft:copper_ingot"},"rewards":{"quality":99},"recipe":{"type":"create:cutting"}},
+             "nodes":[{"id":"body","start":true,"mark_amounts":{"quality":3},"recipe":{"type":"create:pressing"}},
+              {"id":"insert","start":true,"ingredient":{"item":"minecraft:copper_ingot"},"mark_amounts":{"quality":99},"recipe":{"type":"create:cutting"}},
               {"id":"join","checkpoint":true,"recipe":{"type":"minecraft:crafting_shapeless","ingredients":[{"item":"minecraft:iron_nugget"},{"item":"minecraft:iron_nugget"}],"result":{"id":"minecraft:iron_nugget"}},
                "workpiece_inputs":[{"item_input":0,"current_nodes":["body"]},{"item_input":1,"current_nodes":["insert"]}]},
               {"id":"finish","finish":true,"recipe":{"type":"create:pressing"}}],
@@ -213,12 +219,12 @@ public final class NativeCrafterContractsGameTests {
             """).getAsJsonObject());
         try(var s=new Session(h,g)) {
             var definition=g.definition("test:crafter_contract");
-            var main=Workpiece.write(new ItemStack(Items.IRON_NUGGET),dev.graphassembly.core.GraphEngine.complete(definition,null,"body","minecraft:iron_ingot",()->0).state());
-            var auxiliary=Workpiece.write(new ItemStack(Items.IRON_NUGGET),dev.graphassembly.core.GraphEngine.complete(definition,null,"insert","minecraft:copper_ingot",()->0).state());
+            var main=Workpiece.write(new ItemStack(Items.IRON_NUGGET),((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(definition, null, "body", "minecraft:iron_ingot"), ()->0)).progress());
+            var auxiliary=Workpiece.write(new ItemStack(Items.IRON_NUGGET),((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(definition, null, "insert", "minecraft:copper_ingot"), ()->0)).progress());
             s.machine.setItem(7,main.copy());s.machine.setItem(1,new ItemStack(Items.IRON_NUGGET));s.tick();
             check(s.machine.getItem(7).getCount()==1&&s.machine.getItem(1).getCount()==1&&s.chest.isEmpty(),"Declared secondary workpiece cannot be replaced by ordinary nugget");
             s.machine.setItem(1,auxiliary);s.tick();var output=s.chest.getItem(0);var progress=Workpiece.read(h.getLevel(),output);
-            check(progress!=null&&progress.current().equals("join")&&progress.marks().get("quality")==3&&!progress.history().contains("insert"),"Machine output inherits only logical primary progress, not auxiliary reward/history");
+            check(progress!=null&&progress.current().equals("join")&&progress.marks().values().get("quality")==3&&!progress.recentHistory().contains("insert"),"Machine output inherits only logical primary progress, not auxiliary reward/history");
             check(s.machine.isEmpty()&&output.getCount()==1,"Native machine consumes both distinct bound cells once");
         }h.succeed();
     }

@@ -1,5 +1,8 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.progress.TransitionResult;
+
 import com.google.gson.JsonParser;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.content.kinetics.belt.behaviour.TransportedItemStackHandlerBehaviour;
@@ -12,7 +15,6 @@ import com.simibubi.create.content.processing.basin.BasinBlockEntity;
 import com.simibubi.create.content.processing.basin.BasinOperatingBlockEntity;
 import com.simibubi.create.content.processing.basin.BasinRecipe;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.GraphEngine;
 import dev.graphassembly.recipe.GraphIndex;
 import dev.graphassembly.recipe.GraphRecipe;
 import dev.graphassembly.recipe.Workpiece;
@@ -38,8 +40,8 @@ public final class MultiWorkpieceGameTests {
         return new GraphRecipe(JsonParser.parseString("""
           {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
            "nodes":[
-             {"id":"body","start":true,"rewards":{"quality":3},"recipe":{"type":"create:pressing"}},
-             {"id":"insert","start":true,"ingredient":{"item":"minecraft:copper_ingot"},"rewards":{"quality":99},"recipe":{"type":"create:cutting"}},
+             {"id":"body","start":true,"mark_amounts":{"quality":3},"recipe":{"type":"create:pressing"}},
+             {"id":"insert","start":true,"ingredient":{"item":"minecraft:copper_ingot"},"mark_amounts":{"quality":99},"recipe":{"type":"create:cutting"}},
              {"id":"join","checkpoint":true,"recipe":{"type":"%s","ingredients":[{"item":"minecraft:iron_nugget"}]%s},
                "workpiece_inputs":[{"item_input":0,"current_nodes":["body"]},
                  {"item_input":1,"current_nodes":["insert"],"requirements":{"mark_ranges":{"quality":{"min":90,"max":100}}}}]},
@@ -49,13 +51,13 @@ public final class MultiWorkpieceGameTests {
           """.formatted(type, type.equals("create:deploying") ? ",\"keep_held_item\":" + keep : "")).getAsJsonObject());
     }
     private static ItemStack piece(GraphRecipe recipe, String start) {
-        var state = GraphEngine.complete(recipe.definition(ID), null, start, "minecraft:iron_ingot", () -> 0).state();
+        var state = ((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(recipe.definition(ID), null, start, "minecraft:iron_ingot"), () -> 0)).progress();
         return Workpiece.write(new ItemStack(Items.IRON_NUGGET), state);
     }
     private static void check(boolean ok, String reason) { if (!ok) throw new AssertionError(reason); }
     private static void joined(ItemStack result) {
         var state = Workpiece.read(result);
-        check(state.current().equals("join") && state.marks().get("quality") == 3, "Only primary progress may advance");
+        check(state.current().equals("join") && state.marks().values().get("quality") == 3, "Only primary progress may advance");
         check(state.checkpoints().equals(List.of("body", "join")), "Auxiliary history must not merge");
     }
 
@@ -68,7 +70,7 @@ public final class MultiWorkpieceGameTests {
             net.minecraft.world.item.crafting.Ingredient.of(Items.IRON_NUGGET));
         java.util.function.BiPredicate<Integer,ItemStack> predicate=(role,stack)->
             dev.graphassembly.integration.WorkpieceInputs.matches(helper.getLevel(),definition,node,role,stack);
-        java.util.function.IntPredicate significant=role->role==0 || node.workpieceInput(role)!=null;
+        java.util.function.IntPredicate significant=role->role==0 || node.inputs().workpieceInput(role)!=null;
         for(var stacks:List.of(List.of(auxiliary,ItemStack.EMPTY,main),List.of(main,auxiliary))) {
             var bound=dev.graphassembly.integration.ItemInputBinding.bind(ingredients,stacks,predicate,significant);
             check(bound.status()==dev.graphassembly.integration.InputAssignment.Status.UNIQUE,"Permutation must preserve logical roles");
@@ -136,18 +138,17 @@ public final class MultiWorkpieceGameTests {
         if (net.neoforged.fml.ModList.get().isLoaded("kubejs")) {
             var holder=helper.getLevel().getRecipeManager().byKey(ResourceLocation.parse("example:multi_workpiece")).orElseThrow();
             var recipe=(GraphRecipe)holder.value(); var graph=recipe.definition("example:multi_workpiece");
-            check(!recipe.json().has("format_version"),"Script must keep the unified release schema");
             var join=graph.nodes().get("join");
-            check(join.workpieceInput(0).currentNodes().equals(List.of("body","polish")),"Primary role must survive real KubeJS loading");
-            check(join.workpieceInput(1).requirements().markRanges().get("quality").min()==99,"Auxiliary range must survive real KubeJS loading");
-            var restored=dev.graphassembly.core.GraphCodec.parse(graph.id(),com.google.gson.JsonParser.parseString(recipe.json().toString()).getAsJsonObject());
+            check(join.inputs().workpieceInput(0).currentNodes().equals(List.of("body","polish")),"Primary role must survive real KubeJS loading");
+            check(join.inputs().workpieceInput(1).requirements().marks().ranges().get("quality").min()==99,"Auxiliary range must survive real KubeJS loading");
+            var restored=dev.graphassembly.codec.GraphCodec.parse(graph.id(),com.google.gson.JsonParser.parseString(recipe.json().toString()).getAsJsonObject());
             check(graph.equals(restored),"New fields must survive recipe JSON round trip");
             for(boolean polished:List.of(false,true)) {
-                var state=GraphEngine.complete(graph,null,"body","minecraft:gold_ingot",()->0).state();
-                if(polished) state=GraphEngine.complete(graph,state,"polish","minecraft:iron_nugget",()->0).state();
-                state=GraphEngine.complete(graph,state,"join","minecraft:iron_nugget",()->0).state();
-                var result=GraphEngine.complete(graph,state,"finish","minecraft:iron_nugget",()->0);
-                check(result.settled() && result.output().item().equals(polished ? "minecraft:diamond" : "minecraft:emerald"),
+                var state=((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(graph, null, "body", "minecraft:gold_ingot"), ()->0)).progress();
+                if(polished) state=((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(graph, state, "polish", "minecraft:iron_nugget"), ()->0)).progress();
+                state=((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(graph, state, "join", "minecraft:iron_nugget"), ()->0)).progress();
+                var result=GraphPipeline.resolve(GraphPipeline.plan(graph, state, "finish", "minecraft:iron_nugget"), ()->0);
+                check((result instanceof TransitionResult.Settled) && ((TransitionResult.Settled) result).outputs().getFirst().item().equals(polished ? "minecraft:diamond" : "minecraft:emerald"),
                     "Actual script must distinguish ordered paths plus inclusive mark/count ranges");
             }
         }

@@ -57,11 +57,11 @@ An operation with no legal edge is a stop, not a settlement failure. For example
 
 ### Why use three finish nodes?
 
-The current `scrap` belongs to a finish node, not to a successful rule. Three strict finishes naturally express three corresponding failure pools; all three can use pressing because the workpiece's current branch permits only one of them, so three candidates with the same conditions do not arise.
+`scrap` belongs to a finish node, not to a success rule. Three strict finishes therefore provide three separate scrap pools. All three can use pressing: the current branch allows only its own finish, so the machine never has to choose between three matching candidates.
 
 Successful rules are defined in each finish's `outputs`, while graph-level `outputs` remains an empty array. Do not add an unconditional graph-level success rule: graph-level and node-level rules both participate in settlement, so that would also grant a successful output to workpieces that should fail, bypassing the scrap pool.
 
-If you later need “the same finish chooses different scrap based on the failure route,” that requires a separate conditional-scrap feature; this example does not imply that the current format supports it.
+The current format cannot choose different scrap pools at the same finish based on the failure route. Use separate finishes for separate pools, as this example does.
 
 ## JEI finish-linked display
 
@@ -72,7 +72,7 @@ If you later need “the same finish chooses different scrap based on the failur
 - Esc closes the expanded layer first. Changing finishes does not reset graph zoom, panning, or spherical orientation.
 - The native Info page still lists the full successful conditions and scrap pool for each finish. The footer shows candidates and a summary; it does not combine all possible rules into one condition or a fixed probability.
 - The entry shows entry-ingredient candidates, not the complete material list. Check the relevant node preview/details for auxiliary workpieces, Redstone, Water, and other inputs.
-- The new footer reuses existing PNGs/Create-native buttons and does not cover the hand-authored atlas. The graph's crossing edges and model clipping are separate layout issues.
+- The footer uses existing PNGs and Create-native buttons without replacing the hand-authored atlas. Crossing edges and clipped models need to be addressed in the graph layout.
 
 ## Minimum verification checklist
 

@@ -1,7 +1,7 @@
 package dev.graphassembly.client.view;
 
 import com.google.gson.JsonObject;
-import dev.graphassembly.core.WeightedOutput;
+import dev.graphassembly.core.io.WeightedOutput;
 import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SettlementCandidatesTest {
     @Test void perItemChanceUsesRangeButGroupChanceDoesNotInventIntermediateCounts() {
-        var graph = dev.graphassembly.core.GraphCodec.parse("test:chance", com.google.gson.JsonParser.parseString("""
+        var graph = dev.graphassembly.codec.GraphCodec.parse("test:chance", com.google.gson.JsonParser.parseString("""
             {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
              "nodes":[{"id":"f","start":true,"finish":true,"recipe":{"type":"create:pressing"}}],"edges":[],
              "outputs":[{"results":[{"item":"minecraft:diamond","count":64,"chance":0.5},
@@ -35,7 +35,7 @@ class SettlementCandidatesTest {
     }
 
     private static SettlementGroups.Candidate candidate(String item, int count, String finish, double weight) {
-        return new SettlementGroups.Candidate(new WeightedOutput("minecraft:" + item, count, weight, new JsonObject()),
+        return new SettlementGroups.Candidate(new WeightedOutput("minecraft:" + item, count, weight, new JsonObject(), 1),
             List.of(new SettlementGroups.Source(finish, finish, 1, weight)));
     }
 
@@ -50,7 +50,7 @@ class SettlementCandidatesTest {
         var b = candidate("iron_ingot", 4, "a", 7);
         var c = candidate("iron_ingot", 9, "b", 2);
         var tagged = new JsonObject(); tagged.addProperty("custom", "different");
-        var d = new SettlementGroups.Candidate(new WeightedOutput("minecraft:iron_ingot", 1, 3, tagged), a.sources());
+        var d = new SettlementGroups.Candidate(new WeightedOutput("minecraft:iron_ingot", 1, 3, tagged, 1), a.sources());
         var raw = List.of(a, b, c, d);
         var groups = SettlementCandidates.group(raw);
         assertEquals(2, groups.size());

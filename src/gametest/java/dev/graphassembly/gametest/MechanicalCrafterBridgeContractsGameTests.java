@@ -1,12 +1,14 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.progress.TransitionResult;
+
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.content.kinetics.crafter.*;
 import com.simibubi.create.infrastructure.config.AllConfigs;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.GraphEngine;
 import dev.graphassembly.recipe.*;
 import net.createmod.catnip.math.Pointing;
 import net.minecraft.core.*;
@@ -80,18 +82,18 @@ public final class MechanicalCrafterBridgeContractsGameTests {
         try(var s=new Session(helper,true)) {
             var graph=new GraphRecipe(JsonParser.parseString("""
                 {"ingredient":{"item":"minecraft:amethyst_shard"},"transitional_item":"minecraft:iron_nugget",
-                 "nodes":[{"id":"body","start":true,"rewards":{"quality":3},"recipe":{"type":"create:pressing"}},
-                   {"id":"insert","start":true,"ingredient":{"item":"minecraft:copper_ingot"},"rewards":{"quality":99},"recipe":{"type":"create:cutting"}},
+                 "nodes":[{"id":"body","start":true,"mark_amounts":{"quality":3},"recipe":{"type":"create:pressing"}},
+                   {"id":"insert","start":true,"ingredient":{"item":"minecraft:copper_ingot"},"mark_amounts":{"quality":99},"recipe":{"type":"create:cutting"}},
                    {"id":"join","checkpoint":true,"recipe":{"type":"minecraft:crafting_shapeless","ingredients":[{"item":"minecraft:iron_nugget"},{"item":"minecraft:iron_nugget"}],"result":{"id":"minecraft:stone"}},
                     "workpiece_inputs":[{"item_input":0,"current_nodes":["body"]},{"item_input":1,"current_nodes":["insert"]}]},
                    {"id":"f","finish":true,"recipe":{"type":"create:pressing"}}],
                  "edges":[{"from":"body","to":"join"},{"from":"insert","to":"join"},{"from":"join","to":"f"}]}
                 """).getAsJsonObject());s.graph(graph);var definition=graph.definition(ID.toString());
-            var main=Workpiece.write(new ItemStack(Items.IRON_NUGGET),GraphEngine.complete(definition,null,"body","minecraft:amethyst_shard",()->0).state());
-            var auxiliary=Workpiece.write(new ItemStack(Items.IRON_NUGGET),GraphEngine.complete(definition,null,"insert","minecraft:copper_ingot",()->0).state());
+            var main=Workpiece.write(new ItemStack(Items.IRON_NUGGET),((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(definition, null, "body", "minecraft:amethyst_shard"), ()->0)).progress());
+            var auxiliary=Workpiece.write(new ItemStack(Items.IRON_NUGGET),((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(definition, null, "insert", "minecraft:copper_ingot"), ()->0)).progress());
             s.insert(auxiliary,main);s.drive(120);
             check(s.drops().size()==1,"Dual workpiece native chain must export exactly one primary carrier");var progress=Workpiece.read(helper.getLevel(),s.drops().getFirst().getItem());
-            check(progress!=null&&progress.current().equals("join")&&progress.marks().get("quality")==3&&!progress.checkpoints().contains("insert")&&s.pending().isEmpty(),"Physical cell order must not swap logical primary or merge auxiliary history/marks");
+            check(progress!=null&&progress.current().equals("join")&&progress.marks().values().get("quality")==3&&!progress.checkpoints().contains("insert")&&s.pending().isEmpty(),"Physical cell order must not swap logical primary or merge auxiliary history/marks");
         }helper.succeed();
     }
 
@@ -127,7 +129,7 @@ public final class MechanicalCrafterBridgeContractsGameTests {
                        {"id":"f","finish":true,"finish_mode":"strict","recipe":{"type":"minecraft:crafting_shapeless","ingredients":[{"item":"minecraft:iron_nugget"}],"result":{"id":"minecraft:stone"}}}],
                      "edges":[{"from":"s","to":"f"}],"outputs":[{"results":[{"item":"minecraft:diamond"}]}]}
                     """).getAsJsonObject());s.graph(graph);
-                var carrier=Workpiece.write(new ItemStack(Items.IRON_NUGGET),GraphEngine.complete(graph.definition(ID.toString()),null,"s","minecraft:amethyst_shard",()->0).state());
+                var carrier=Workpiece.write(new ItemStack(Items.IRON_NUGGET),((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(graph.definition(ID.toString()), null, "s", "minecraft:amethyst_shard"), ()->0)).progress());
                 s.insert(carrier,ItemStack.EMPTY);config.set(false);s.drive(3);
                 check(s.drops().isEmpty()&&s.pending().size()==1&&Workpiece.has(s.pending().getFirst()),"Existing progressing native job cannot bypass disabled config or fall back/eject");
                 var replacement=graph.json();replacement.getAsJsonArray("outputs").get(0).getAsJsonObject().getAsJsonArray("results").get(0).getAsJsonObject().addProperty("item","minecraft:emerald");s.graph(new GraphRecipe(replacement));config.set(true);s.drive(80);

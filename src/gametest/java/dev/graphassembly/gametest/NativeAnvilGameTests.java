@@ -1,5 +1,9 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.codec.ProgressCodec;
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.progress.TransitionResult;
+
 import com.google.gson.JsonParser;
 import dev.graphassembly.GraphAssembly;
 import dev.graphassembly.recipe.GraphIndex;
@@ -77,7 +81,7 @@ public final class NativeAnvilGameTests {
                 "Graph pickup preserves actual native result components, damage, XP payment and material consumption");
             var progress=Workpiece.read(level,result);
             check(progress!=null&&progress.graphId().equals(id.toString())&&progress.current().equals("repair")
-                &&progress.history().equals(List.of("repair")),
+                &&progress.recentHistory().equals(List.of("repair")),
                 "Successful native anvil repair must advance graph progress to repair exactly once");
             helper.succeed();
         } finally {
@@ -125,7 +129,7 @@ public final class NativeAnvilGameTests {
                 check(ItemStack.matches(stripped,nativeResult)&&player.experienceLevel==nativeXp&&menu.getSlot(0).getItem().isEmpty()
                     &&ItemStack.matches(menu.getSlot(1).getItem(),nativeRemainder),"Graph enchant/work retains actual native result components, fee and book consumption");
                 var progress=Workpiece.read(level,result);
-                check(progress!=null&&progress.graphId().equals(id.toString())&&progress.current().equals("apply")&&progress.history().equals(List.of("apply")),
+                check(progress!=null&&progress.graphId().equals(id.toString())&&progress.current().equals("apply")&&progress.recentHistory().equals(List.of("apply")),
                     "Actual enchanted-book operation must advance "+(explicitEnchant?"explicit enchant":"default work")+" graph once");
             }
             // A real valid rename is not an enchantment/repair operation for default work.
@@ -180,7 +184,7 @@ public final class NativeAnvilGameTests {
                 check(ItemStack.matches(stripped,nativeResult)&&player.experienceLevel==nativeXp&&menu.getSlot(0).getItem().isEmpty()&&menu.getSlot(1).getItem().isEmpty(),
                     "Explicit rename preserves actual native name effect, sword carrier and one-time fee");
                 var progress=Workpiece.read(level,result);
-                check(progress!=null&&progress.graphId().equals(id.toString())&&progress.current().equals("rename")&&progress.history().equals(List.of("rename")),
+                check(progress!=null&&progress.graphId().equals(id.toString())&&progress.current().equals("rename")&&progress.recentHistory().equals(List.of("rename")),
                     "Successful explicit native "+(remove?"name removal":"rename")+" advances graph once");
                 menu.setCarried(ItemStack.EMPTY);menu.getSlot(0).set(nativeResult.copy());menu.setItemName(target);menu.slotsChanged(menu.getSlot(0).container);
                 int unchangedXp=player.experienceLevel;menu.clicked(2,0,ClickType.PICKUP,player);
@@ -223,7 +227,7 @@ public final class NativeAnvilGameTests {
                    {"id":"finish","finish":true,"recipe":{"type":"create:pressing"}}],
                  "edges":[{"from":"combine","to":"finish"}],"outputs":[{"results":[{"item":"minecraft:diamond"}]}]}
                 """).getAsJsonObject());
-            var ignoredProgress=dev.graphassembly.core.GraphEngine.complete(graph.definition(id.toString()),null,"combine","minecraft:iron_sword",()->0).state().toJsonString();
+            var ignoredProgress=ProgressCodec.toJsonString(((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(graph.definition(id.toString()), null, "combine", "minecraft:iron_sword"), ()->0)).progress());
             for(String effect:List.of("changed-item","custom-component","name-only","repair-cost-only","progress-only")) {
                 int[] calls={0};
                 java.util.function.Consumer<net.neoforged.neoforge.event.AnvilUpdateEvent> listener=event->{
@@ -256,7 +260,7 @@ public final class NativeAnvilGameTests {
                         check(ItemStack.matches(stripped,nativeResult)&&player.experienceLevel==nativeXp&&menu.getSlot(0).getItem().isEmpty()&&ItemStack.matches(menu.getSlot(1).getItem(),nativeRemainder),
                             "Combine keeps complete original host result and actual fee/material use, never graph default");
                         var progress=Workpiece.read(level,result);
-                        check(progress!=null&&progress.graphId().equals(id.toString())&&progress.current().equals("combine")&&progress.history().equals(List.of("combine")),
+                        check(progress!=null&&progress.graphId().equals(id.toString())&&progress.current().equals("combine")&&progress.recentHistory().equals(List.of("combine")),
                             "Actual host "+effect+" combination advances explicit combine graph once");
                     } else {
                         check(menu.getCarried().isEmpty()&&!menu.getSlot(2).hasItem()&&player.experienceLevel==30&&menu.getSlot(0).getItem().is(Items.IRON_SWORD)&&menu.getSlot(1).getItem().getCount()==3,

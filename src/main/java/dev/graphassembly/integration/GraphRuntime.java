@@ -1,9 +1,20 @@
 package dev.graphassembly.integration;
 
+import dev.graphassembly.recipe.OperationSpec;
+
+import dev.graphassembly.core.definition.basic.GraphDefinition;
+import dev.graphassembly.core.io.InputEligibility;
+import dev.graphassembly.core.io.PreflightResult;
+import dev.graphassembly.core.io.OutputTrees;
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.integration.sequence.NativeSequences;
+import dev.graphassembly.core.progress.Progress;
+import dev.graphassembly.core.progress.TransitionPlan;
+import dev.graphassembly.core.progress.TransitionResult;
+
 import com.simibubi.create.AllDataComponents;
 import com.simibubi.create.content.processing.recipe.ProcessingRecipe;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.*;
 import dev.graphassembly.recipe.*;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -28,7 +39,9 @@ public final class GraphRuntime {
     }
     public static <R extends ProcessingRecipe<?, ?>> Lookup<R> lookup(Level level, ItemStack input, RecipeType<R> type, Class<R> clazz,
                                                                     Predicate<RecipeHolder<R>> matches, boolean preview, List<ItemStack> auxiliary) {
-        if (input.isEmpty() || input.has(AllDataComponents.SEQUENCED_ASSEMBLY)) return new Lookup<>(false, List.of());
+        if (input.isEmpty()) return new Lookup<>(false, List.of());
+        if (input.has(AllDataComponents.SEQUENCED_ASSEMBLY) && !NativeSequences.currentStep(level,input))
+            return new Lookup<>(!NativeSequences.allowsUpstream(level,input,type,clazz,matches), List.of());
         Progress state;
         try { state = Workpiece.read(level, input); }
         catch (RuntimeException e) { return new Lookup<>(true, List.of()); }
@@ -38,11 +51,11 @@ public final class GraphRuntime {
         boolean unsupportedOutput = false;
         List<GraphIndex.Entry> entries;
         var sourceTypes=CreateNativeRecipes.sourceTypes(type);
-        if (state == null) entries = sourceTypes.stream().flatMap(source->index.entries(source).stream()).toList();
+        if (state == null) entries = sourceTypes.stream().flatMap(source->NativeSequences.entries(level,index,source).stream()).toList();
         else {
             var graph = index.graphs().get(state.graphId());
             if (graph == null) return new Lookup<>(true, List.of());
-            var preflight = GraphEngine.preflight(graph, state);
+            var preflight = GraphPipeline.preflight(graph, state);
             if (preflight.incompatibility() != null) return new Lookup<>(true, List.of());
             entries = new ArrayList<>();
             for (String nodeId : preflight.allowed())
@@ -55,20 +68,20 @@ public final class GraphRuntime {
                 var node = entry.node();
                 String nodeId = node.id();
                 if (state == null && !entry.ingredient().test(input)) continue;
-                var nativeType=index.nativeType(graph.id(),nodeId);
+                var nativeType=NativeSequences.type(level,index,entry);
                 if (!sourceTypes.contains(nativeType)) continue;
                 if (!WorkpieceInputs.matches(level, graph, node, 0, input)) continue;
                 boolean inputsMatch = true;
                 for (int i = 0; i < auxiliary.size(); i++)
                     if (!WorkpieceInputs.matches(level, graph, node, i + 1, auxiliary.get(i))) inputsMatch = false;
-                if (!preview && node.workpieceInputs().stream().anyMatch(role -> role.itemInput() > auxiliary.size())) inputsMatch = false;
+                if (!preview && node.inputs().workpieceInputs().stream().anyMatch(role -> role.itemInput() > auxiliary.size())) inputsMatch = false;
                 if (!inputsMatch) continue;
                 // Runtime-only check: static recipe indexing also materializes non-Start nodes
                 // with an untagged dummy item, so it must not attempt to advance graph progress.
                 RecipeType<?> fillingType = com.simibubi.create.AllRecipeTypes.FILLING.getType();
                 if (type == fillingType) {
-                    var plan = GraphEngine.plan(graph, state, nodeId, BuiltInRegistries.ITEM.getKey(input.getItem()).toString());
-                    if (plan.settled() && OutputTrees.maxStacks(plan.pool()) > 1) {
+                    var plan = GraphPipeline.plan(graph, state, nodeId, BuiltInRegistries.ITEM.getKey(input.getItem()).toString());
+                    if (plan instanceof TransitionPlan.SettlementPlan settlement && OutputTrees.maxStacks(settlement.outputPool()) > 1) {
                         unsupportedOutput = true;
                         continue;
                     }
@@ -83,30 +96,34 @@ public final class GraphRuntime {
                 GraphOperation.attach(recipe, new GraphOperation(level, graph, node, snapshot, auxiliary));
                 if (!matches.test(holder)) continue;
                 candidates.add(holder);
-                descriptions.add(graph.id() + "/" + nodeId + " " + node.recipe());
+                descriptions.add(graph.id() + "/" + nodeId + " " + node.operation().recipe());
         }
         if (candidates.size() > 1 && !preview) {
             GraphAssembly.LOGGER.error("Ambiguous graph operation {} for {}: {}", type, input, descriptions);
             return new Lookup<>(true, List.of());
         }
-        return new Lookup<>(state != null || unsupportedOutput || !candidates.isEmpty(), List.copyOf(candidates));
+        return new Lookup<>(state != null || input.has(AllDataComponents.SEQUENCED_ASSEMBLY) || unsupportedOutput || !candidates.isEmpty(), List.copyOf(candidates));
     }
-    public static ItemStack complete(Level level, GraphDefinition graph, String node, Progress before, ItemStack snapshot) {
-        var plan = GraphEngine.plan(graph, before, node, BuiltInRegistries.ITEM.getKey(snapshot.getItem()).toString());
-        if (plan.settled() && OutputTrees.maxStacks(plan.pool()) > 1)
+    public static ItemStack complete(Level level, GraphDefinition<OperationSpec> graph, String node, Progress before, ItemStack snapshot) {
+        var plan = GraphPipeline.plan(graph, before, node, BuiltInRegistries.ITEM.getKey(snapshot.getItem()).toString());
+        if (plan instanceof TransitionPlan.SettlementPlan settlement && OutputTrees.maxStacks(settlement.outputPool()) > 1)
             throw new IllegalArgumentException("Multiple settlement outputs require completeAll, not a single-stack output API");
-        var outputs = materialize(level, plan.roll(level.random::nextDouble), snapshot);
+        var outputs = materialize(level, GraphPipeline.resolve(plan, level.random::nextDouble), snapshot);
         return outputs.isEmpty() ? ItemStack.EMPTY : outputs.getFirst();
     }
-    public static List<ItemStack> completeAll(Level level, GraphDefinition graph, String node, Progress before, ItemStack snapshot,
+    public static List<ItemStack> completeAll(Level level, GraphDefinition<OperationSpec> graph, String node, Progress before, ItemStack snapshot,
                                                net.minecraft.util.RandomSource random) {
-        return materialize(level, GraphEngine.complete(graph, before, node,
-            BuiltInRegistries.ITEM.getKey(snapshot.getItem()).toString(), random::nextDouble), snapshot);
+        return materialize(level, GraphPipeline.resolve(GraphPipeline.plan(graph, before, node, BuiltInRegistries.ITEM.getKey(snapshot.getItem()).toString()), random::nextDouble), snapshot);
     }
-    private static List<ItemStack> materialize(Level level, Completion result, ItemStack snapshot) {
-        if (result.settled()) return result.outputs().stream().map(output -> NativeSteps.output(level, output)).toList();
-        ItemStack intermediate = result.item().equals(BuiltInRegistries.ITEM.getKey(snapshot.getItem()).toString()) ? snapshot : NativeSteps.stack(result.item());
-        return List.of(Workpiece.write(intermediate, result.state()));
+    private static List<ItemStack> materialize(Level level, TransitionResult result, ItemStack snapshot) {
+        return switch (result) {
+            case TransitionResult.Settled settled -> settled.outputs().stream().map(output -> NativeSteps.output(level, output)).toList();
+            case TransitionResult.Continued continued -> {
+                ItemStack intermediate = continued.carrierItem().equals(BuiltInRegistries.ITEM.getKey(snapshot.getItem()).toString())
+                    ? snapshot : NativeSteps.stack(continued.carrierItem());
+                yield List.of(Workpiece.write(intermediate, continued.progress()));
+            }
+        };
     }
     public static String problem(Level level, ItemStack input) {
         var problem = diagnostic(level, input);
@@ -127,15 +144,15 @@ public final class GraphRuntime {
             if (graph == null) return index.disabledReason(state.graphId()) == null
                 ? new Diagnostic("graph_assembly.stop.missing", "Missing graph: " + state.graphId())
                 : new Diagnostic("graph_assembly.stop.disabled", index.disabledReason(state.graphId()));
-            var preflight = GraphEngine.preflight(graph, state);
+            var preflight = GraphPipeline.preflight(graph, state);
             if (preflight.incompatibility() != null) return new Diagnostic("graph_assembly.stop.changed", preflight.incompatibility());
             if (!preflight.blocked().isEmpty() && preflight.allowed().isEmpty()
-                    && WorkpieceParticipation.auxiliaries(graph, state, preflight).isEmpty()) {
-                var reasons = Set.copyOf(preflight.blockedReasons().values());
+                    && InputEligibility.auxiliaries(graph, state, preflight).isEmpty()) {
+                var reasons = Set.copyOf(preflight.blocked().values().stream().map(PreflightResult.Problem::reason).toList());
                 String key = reasons.size() > 1 ? "graph_assembly.stop.blocked"
-                    : reasons.contains(GraphEngine.BlockedReason.PRIMARY_CONDITIONS) ? "graph_assembly.stop.conditions"
+                    : reasons.contains(PreflightResult.BlockedReason.PRIMARY_CONDITIONS) ? "graph_assembly.stop.conditions"
                     : "graph_assembly.stop.capacity";
-                return new Diagnostic(key, "No executable next step: " + String.join("; ", preflight.blocked().values()));
+                return new Diagnostic(key, "No executable next step: " + String.join("; ", preflight.blocked().values().stream().map(PreflightResult.Problem::message).toList()));
             }
             return null;
         } catch (RuntimeException e) { return new Diagnostic("graph_assembly.stop.invalid", "Invalid saved progress: " + e.getMessage()); }

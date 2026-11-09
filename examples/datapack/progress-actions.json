@@ -4,7 +4,7 @@
   "transitional_item": "minecraft:iron_nugget",
   "nodes": [
     {"id": "start", "start": true, "position": [-120, -55],
-     "recipe": {"type": "create:pressing"}, "rewards": {"defect": 3}},
+     "recipe": {"type": "create:pressing"}, "mark_amounts": {"defect": 3}},
     {"id": "inspect", "checkpoint": true, "position": [0, -55],
      "recipe": {"type": "create:cutting", "processing_time": 40}},
     {"id": "rework", "position": [-120, 65],

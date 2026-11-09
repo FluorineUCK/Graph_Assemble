@@ -1,6 +1,10 @@
 package dev.graphassembly.client;
 
-import com.simibubi.create.content.processing.recipe.ProcessingRecipe;
+import dev.graphassembly.recipe.OperationSpec;
+
+import dev.graphassembly.core.definition.basic.GraphDefinition;
+import dev.graphassembly.core.definition.basic.NodeDefinition;
+
 import com.simibubi.create.foundation.gui.AllIcons;
 import com.simibubi.create.foundation.gui.widget.*;
 import dev.graphassembly.client.gui.GraphGuiRenderer;
@@ -11,7 +15,6 @@ import static dev.graphassembly.client.gui.GraphGuiRenderer.filterColor;
 import dev.graphassembly.client.view.FilterDraft;
 import dev.graphassembly.client.view.FilterScreenLayout;
 import dev.graphassembly.client.view.NodePresentation.Bounds;
-import dev.graphassembly.core.*;
 import dev.graphassembly.filter.*;
 import dev.graphassembly.integration.NativeSteps;
 import dev.graphassembly.recipe.GraphIndex;
@@ -32,9 +35,9 @@ public final class GraphFilterScreen extends Screen {
     private final InteractionHand hand;
     private final ItemStack editingStack, original;
     private final FilterDraft draft;
-    private List<GraphDefinition> graphs = List.of();
+    private List<GraphDefinition<OperationSpec>> graphs = List.of();
     private final Map<String, net.minecraft.world.item.crafting.Recipe<?>> steps = new LinkedHashMap<>();
-    private List<Node> nodes = List.of();
+    private List<NodeDefinition<OperationSpec>> nodes = List.of();
     private int nodeIndex, listOffset;
     private FilterScreenLayout layout;
     private final List<AbstractSimiWidget> nativeWidgets = new ArrayList<>();
@@ -51,22 +54,22 @@ public final class GraphFilterScreen extends Screen {
     private static net.minecraft.network.chat.MutableComponent text(String key, Object... args) {
         return Component.translatable("graph_assembly.filter." + key, args);
     }
-    private GraphDefinition graph() { return graphs.stream().filter(g -> g.id().equals(draft.graph())).findFirst().orElse(null); }
-    private ItemStack representative(GraphDefinition graph) {
-        var outputs = graph.outputs().stream().flatMap(r -> r.results().stream()).toList();
-        if (outputs.isEmpty()) outputs = graph.nodes().values().stream().flatMap(n -> n.outputs().stream()).flatMap(r -> r.results().stream()).toList();
+    private GraphDefinition<OperationSpec> graph() { return graphs.stream().filter(g -> g.id().equals(draft.graph())).findFirst().orElse(null); }
+    private ItemStack representative(GraphDefinition<OperationSpec> graph) {
+        var outputs = graph.outputRules().stream().flatMap(r -> r.leaves().stream()).toList();
+        if (outputs.isEmpty()) outputs = graph.nodes().values().stream().flatMap(n -> n.settlement().outputRules().stream()).flatMap(r -> r.leaves().stream()).toList();
         if (!outputs.isEmpty()) return NativeSteps.output(minecraft.level, outputs.getFirst());
-        if (graph.ingredient() != null) {
-            var items = NativeSteps.ingredient(minecraft.level, graph.ingredient()).getItems();
+        if (graph.defaults().ingredient() != null) {
+            var items = NativeSteps.ingredient(minecraft.level, graph.defaults().ingredient()).getItems();
             if (items.length > 0) return items[0];
         }
-        return NativeSteps.stack(graph.transitionalItem());
+        return NativeSteps.stack(graph.defaults().transitionalItem());
     }
-    private Component graphName(GraphDefinition graph) { return representative(graph).getHoverName(); }
-    private Component nodeName(Node node) {
+    private Component graphName(GraphDefinition<OperationSpec> graph) { return representative(graph).getHoverName(); }
+    private Component nodeName(NodeDefinition<OperationSpec> node) {
         var recipe = steps.get(node.id());
-        if (recipe == null && !node.isCampfire()) return text("unavailable_node", node.id());
-        var result = Component.literal((nodes.indexOf(node) + 1) + ". ").append(node.isCampfire()
+        if (recipe == null && !node.operation().isCampfire()) return text("unavailable_node", node.id());
+        var result = Component.literal((nodes.indexOf(node) + 1) + ". ").append(node.operation().isCampfire()
             ? StepDescription.describeCampfire(node) : StepDescription.describe(recipe));
         var materials = recipe == null ? List.<Component>of() : StepDescription.materials(recipe);
         if (!materials.isEmpty()) result.append(" · ").append(materials.getFirst());
@@ -96,7 +99,7 @@ public final class GraphFilterScreen extends Screen {
         steps.clear();
         var graph = graph(); nodes = graph == null ? List.of() : new ArrayList<>(graph.nodes().values());
         for (var node : nodes) {
-            try { steps.put(node.id(), NativeSteps.template(minecraft.level, graph, node, NativeSteps.stack(graph.transitionalItem()))); }
+            try { steps.put(node.id(), NativeSteps.template(minecraft.level, graph, node, NativeSteps.stack(graph.defaults().transitionalItem()))); }
             catch (RuntimeException ignored) { /* Invalid display data remains visible and cannot be added. */ }
         }
         nodeIndex = Math.max(0, Math.min(nodeIndex, nodes.size() - 1));
@@ -230,13 +233,13 @@ public final class GraphFilterScreen extends Screen {
         if (graph != null) item(g,representative(graph),layout.graphIcon());
         if (!nodes.isEmpty()) {
             var node = nodes.get(nodeIndex);
-            if (node.isCampfire() || steps.containsKey(node.id())) item(g,StepDescription.machine(node,steps.get(node.id())),layout.nodeIcon());
+            if (node.operation().isCampfire() || steps.containsKey(node.id())) item(g,StepDescription.machine(node,steps.get(node.id())),layout.nodeIcon());
         }
         for (int row = 0; row < ROWS && listOffset + row < draft.targets().size(); row++) {
             var id = draft.targets().get(listOffset + row); var node = graph == null ? null : graph.nodes().get(id);
             GraphGuiRenderer.sprite(g, Sprite.FILTER_ICON_SLOT, layout.rowIconFrame(row));
             GraphGuiRenderer.sprite(g, Sprite.FILTER_CHOICE, layout.rowTextFrame(row));
-            if (node != null && (node.isCampfire() || steps.containsKey(id)))
+            if (node != null && (node.operation().isCampfire() || steps.containsKey(id)))
                 item(g,StepDescription.machine(node,steps.get(id)),layout.rowIcon(row));
             var label = node == null ? text("unavailable_node", id) : nodeName(node);
             if (draft.inverted().contains(id)) label = text("inverted", label);

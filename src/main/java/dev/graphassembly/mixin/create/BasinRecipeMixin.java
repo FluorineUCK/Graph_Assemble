@@ -29,6 +29,6 @@ public abstract class BasinRecipeMixin {
     @Redirect(method="apply(Lcom/simibubi/create/content/processing/basin/BasinBlockEntity;Lnet/minecraft/world/item/crafting/Recipe;Z)Z",
         at=@At(value="INVOKE",target="Lnet/minecraft/world/item/crafting/Ingredient;test(Lnet/minecraft/world/item/ItemStack;)Z"))
     private static boolean graphAssembly$ordinaryInput(Ingredient ingredient,ItemStack stack) {
-        return !Workpiece.has(stack) && ingredient.test(stack);
+        return !dev.graphassembly.integration.sequence.NativeSequences.tracked(stack) && ingredient.test(stack);
     }
 }

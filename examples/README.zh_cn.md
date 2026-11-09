@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-示例均为独立启用，不是自动加载的完整整合包。开始前检查入口原料和工序，避免同时启用入口条件冲突的图。
+这些示例需要分别启用，不会自动加载，也不构成一套完整整合包。使用前检查各图的入口原料和工序，不要同时启用入口条件冲突的示例。
 
 ## 数据包配方
 
@@ -29,3 +29,10 @@
 | [`kubejs/filter_crafting.js`](kubejs/filter_crafting.js) | 定制内置过滤器教学图 |
 
 `filter_crafting.js` 按同一个 `graph_assembly:graph_filter` ID 删除并替换内置教学配方；不要改用新 ID 与内置图并行启用，以免入口冲突。完整作者说明见 [KubeJS 指南](../docs/guide/kubejs.zh_cn.md)。
+
+## 原生序列装配
+
+[数据包](datapack/native-sequence.json) / [KubeJS](kubejs/native_sequence.js)：Create 原生序列，先经熔炉加工，再冲压，重复两轮。两个版本只启用一个，并检查是否与其他示例的入口条件冲突。
+
+- [fluent_authoring.js](kubejs/fluent_authoring.js): 链式注册、条件边、出口成品池和原生序列。
+- [additional_create_steps.js](kubejs/additional_create_steps.js): 粉碎、砂纸、洗涤、缠魂、分液的完整加工链。

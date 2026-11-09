@@ -1,8 +1,10 @@
 package dev.graphassembly.client.view;
 
+import dev.graphassembly.recipe.OperationSpec;
+
 import com.google.gson.JsonParser;
-import dev.graphassembly.core.GraphCodec;
-import dev.graphassembly.core.GraphDefinition;
+import dev.graphassembly.codec.GraphCodec;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -73,8 +75,8 @@ class SettlementGroupsTest {
         assertEquals(List.of("z", "a"), groups.finishes().stream().map(SettlementGroups.Finish::id).toList());
         assertTrue(groups.overview().isEmpty());
         assertTrue(groups.finishes().stream().allMatch(f -> f.rules().isEmpty() && f.success().isEmpty() && f.scrap().isEmpty()));
-        assertEquals(dev.graphassembly.core.FinishMode.STRICT, groups.finishes().getFirst().mode());
-        assertEquals(dev.graphassembly.core.FinishMode.LENIENT, groups.finishes().getLast().mode());
+        assertEquals(dev.graphassembly.core.settlement.FinishMode.STRICT, groups.finishes().getFirst().mode());
+        assertEquals(dev.graphassembly.core.settlement.FinishMode.LENIENT, groups.finishes().getLast().mode());
         var noFinishes = SettlementGroups.from(parse("""
             {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
              "nodes":[{"id":"s","start":true,"recipe":{"type":"create:pressing"}}],"edges":[],"outputs":[]}
@@ -83,7 +85,7 @@ class SettlementGroupsTest {
         assertTrue(noFinishes.overview().isEmpty());
     }
 
-    private static GraphDefinition parse(String json) {
+    private static GraphDefinition<OperationSpec> parse(String json) {
         return GraphCodec.parse("test:groups", JsonParser.parseString(json).getAsJsonObject());
     }
 }

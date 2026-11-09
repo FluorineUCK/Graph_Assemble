@@ -1,5 +1,7 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.recipe.RecipeMode;
+
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
@@ -53,7 +55,7 @@ public final class NativeTemplateGameTests {
             "Complete preview retains raw native primary candidates instead of graph entrance substitution");
         check(preview.getRollableResults().getFirst().getStack().is(Items.DIAMOND)
             && preview.getRollableResults().getFirst().getStack().getCount() == 2, "Complete preview retains raw native results/counts");
-        check(node.recipe().equals(nativeJson), "Execution and preview never mutate the JSON snapshot");
+        check(node.operation().recipe().equals(nativeJson), "Execution and preview never mutate the JSON snapshot");
         helper.succeed();
     }
 
@@ -91,7 +93,7 @@ public final class NativeTemplateGameTests {
         var definition = roundTripped.definition("test:native_smelting");
         check(original.definition(definition.id()).equals(definition), "Graph recipe codec preserves native mode without a format fork");
         var node = definition.nodes().get("s");
-        check(node.nativeRecipe() && node.completeRecipe(), "Mode survives the real graph serializer");
+        check((node.operation().recipeMode() == RecipeMode.NATIVE) && node.operation().completeRecipe(), "Mode survives the real graph serializer");
         var preview = GraphPreviewRecipes.resolve(level, definition, node).value();
         check(preview.getIngredients().getFirst().test(new ItemStack(Items.RAW_COPPER))
             && !preview.getIngredients().getFirst().test(new ItemStack(Items.IRON_INGOT)), "Native preview is not rewritten to graph entrance");
@@ -155,11 +157,11 @@ public final class NativeTemplateGameTests {
     public static void nativeRepresentationDoesNotChangeOperationDescriptorPreviews(GameTestHelper helper) {
         var anvil = graph(json("{\"type\":\"graph_assembly:anvil\",\"action\":\"repair\",\"addition\":{\"item\":\"minecraft:iron_ingot\"}}"), true)
             .definition("test:native_anvil_descriptor");
-        var preview = (dev.graphassembly.integration.anvil.AnvilRecipe) GraphPreviewRecipes.resolve(helper.getLevel(), anvil, anvil.nodes().get("s")).value();
-        check(preview.previewAddition().test(new ItemStack(Items.IRON_INGOT)), "Node mode does not skip descriptor-owned preview enrichment");
+        var preview = (dev.graphassembly.integration.vanilla.anvil.AnvilRecipe) GraphPreviewRecipes.resolve(helper.getLevel(), anvil, anvil.nodes().get("s")).value();
+        check(preview.previewAddition().test(new ItemStack(Items.IRON_INGOT)), "NodeDefinition mode does not skip descriptor-owned preview enrichment");
         var brewing = graph(json("{\"type\":\"graph_assembly:brewing\",\"addition\":{\"item\":\"minecraft:nether_wart\"}}"), true)
             .definition("test:native_brewing_descriptor");
-        var brewPreview = (dev.graphassembly.integration.brewing.BrewingRecipe) GraphPreviewRecipes.resolve(helper.getLevel(), brewing, brewing.nodes().get("s")).value();
+        var brewPreview = (dev.graphassembly.integration.vanilla.brewing.BrewingRecipe) GraphPreviewRecipes.resolve(helper.getLevel(), brewing, brewing.nodes().get("s")).value();
         check(brewPreview.previewAddition().stream().anyMatch(stack -> stack.is(Items.NETHER_WART)), "Brewing descriptor addition remains visible");
         helper.succeed();
     }

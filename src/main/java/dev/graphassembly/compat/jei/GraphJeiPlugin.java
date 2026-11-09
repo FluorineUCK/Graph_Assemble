@@ -1,7 +1,9 @@
 package dev.graphassembly.compat.jei;
 
+import dev.graphassembly.recipe.OperationSpec;
+
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.GraphDefinition;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
 import dev.graphassembly.integration.GraphPreviewRecipes;
 import mezz.jei.api.*;
 import mezz.jei.api.recipe.RecipeType;
@@ -13,12 +15,12 @@ import dev.graphassembly.client.view.PreviewReloads;
 @JeiPlugin
 public final class GraphJeiPlugin implements IModPlugin {
     private static mezz.jei.api.runtime.IJeiRuntime runtime;
-    private static java.util.List<GraphDefinition> registeredGraphs = java.util.List.of();
+    private static java.util.List<GraphDefinition<OperationSpec>> registeredGraphs = java.util.List.of();
     private static final GraphNativeRecipeLookupPlugin nativeLookup = new GraphNativeRecipeLookupPlugin();
-    static java.util.List<GraphDefinition> registeredGraphs() { return registeredGraphs; }
-    private static final dev.graphassembly.client.view.RecipeViewStateCache<GraphDefinition, GraphViewState> views =
+    static java.util.List<GraphDefinition<OperationSpec>> registeredGraphs() { return registeredGraphs; }
+    private static final dev.graphassembly.client.view.RecipeViewStateCache<GraphDefinition<OperationSpec>, GraphViewState> views =
         new dev.graphassembly.client.view.RecipeViewStateCache<>();
-    static GraphViewState viewState(GraphDefinition graph) {
+    static GraphViewState viewState(GraphDefinition<OperationSpec> graph) {
         return views.get(graph, () -> new GraphViewState(ViewPreference.sphere(), graph));
     }
     private static final java.util.Set<GraphWidget> widgets = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
@@ -57,7 +59,7 @@ public final class GraphJeiPlugin implements IModPlugin {
         if (clearViews) views.clear();
         widgets.clear();
     }
-    public static final RecipeType<GraphDefinition> TYPE = RecipeType.create(GraphAssembly.ID, "assembly", GraphDefinition.class);
+    public static final RecipeType<GraphCategory.Display> TYPE = RecipeType.create(GraphAssembly.ID, "assembly", GraphCategory.Display.class);
     @Override public ResourceLocation getPluginUid() { return GraphAssembly.id("jei"); }
     @Override public void registerGuiHandlers(IGuiHandlerRegistration registration) {
         var handler = new GraphFilterGuiHandler();
@@ -74,7 +76,7 @@ public final class GraphJeiPlugin implements IModPlugin {
         var level = Minecraft.getInstance().level;
         if (level != null) {
             registeredGraphs = GraphPreviewRecipes.graphs(level);
-            registration.addRecipes(TYPE, registeredGraphs);
+            registration.addRecipes(TYPE, registeredGraphs.stream().map(GraphCategory.Display::new).toList());
             registeredGraphs.forEach(graph -> SettlementInfo.register(registration, level, graph));
         }
     }

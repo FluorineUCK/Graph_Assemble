@@ -1,5 +1,8 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.progress.TransitionResult;
+
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import com.simibubi.create.AllRecipeTypes;
@@ -40,7 +43,7 @@ public final class NativeTypeRoutingGameTests {
             check(index.entries(AllRecipeTypes.PRESSING.getType()).size()==1 && index.entries(AllRecipeTypes.CUTTING.getType()).isEmpty(),
                 "Only start nodes enter typed entrance buckets");
             check(index.nativeType(id,"f")==AllRecipeTypes.CUTTING.getType(),"Non-start node also captures native type");
-            var state=dev.graphassembly.core.GraphEngine.complete(graph.definition(id),null,"s","minecraft:iron_ingot",()->0).state();
+            var state=((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(graph.definition(id), null, "s", "minecraft:iron_ingot"), ()->0)).progress();
             var piece=dev.graphassembly.recipe.Workpiece.write(new ItemStack(Items.IRON_NUGGET),state);
             check(GraphRuntime.lookup(level,piece,AllRecipeTypes.CUTTING.getType(),
                 com.simibubi.create.content.kinetics.saw.CuttingRecipe.class,r->true).recipes().size()==1,"Progress routes by captured next-node native type");

@@ -1,12 +1,14 @@
 package dev.graphassembly.client;
 
+import dev.graphassembly.recipe.OperationSpec;
+
 import com.simibubi.create.content.processing.recipe.ProcessingRecipe;
 import com.simibubi.create.content.processing.sequenced.IAssemblyRecipe;
 import dev.graphassembly.client.view.StepPresentation;
-import dev.graphassembly.core.CampfireKind;
-import dev.graphassembly.core.Node;
-import dev.graphassembly.integration.anvil.AnvilRecipe;
-import dev.graphassembly.integration.brewing.BrewingRecipe;
+import dev.graphassembly.integration.vanilla.campfire.CampfireKind;
+import dev.graphassembly.core.definition.basic.NodeDefinition;
+import dev.graphassembly.integration.vanilla.anvil.AnvilRecipe;
+import dev.graphassembly.integration.vanilla.brewing.BrewingRecipe;
 import dev.graphassembly.client.view.TooltipSummary;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -20,26 +22,26 @@ import java.util.*;
 /** Client presentation shared by JEI and the JEI-independent filter screen. */
 public final class StepDescription {
     private StepDescription() {}
-    public static Component describeCampfire(Node node) {
+    public static Component describeCampfire(NodeDefinition<OperationSpec> node) {
         var normal = Component.translatable("block.minecraft.campfire");
         var soul = Component.translatable("block.minecraft.soul_campfire");
-        return switch (node.campfire()) {
+        return switch (node.operation().campfire()) {
             case NORMAL -> normal;
             case SOUL -> soul;
             case ANY -> Component.translatable("graph_assembly.campfire.any", normal, soul);
         };
     }
-    public static ItemStack campfireMachine(Node node) {
-        return new ItemStack(node.campfire() == CampfireKind.SOUL ? Items.SOUL_CAMPFIRE : Items.CAMPFIRE);
+    public static ItemStack campfireMachine(NodeDefinition<OperationSpec> node) {
+        return new ItemStack(node.operation().campfire() == CampfireKind.SOUL ? Items.SOUL_CAMPFIRE : Items.CAMPFIRE);
     }
-    public static ItemStack machine(Node node, Recipe<?> recipe) {
-        return node.isCampfire() ? campfireMachine(node) : machine(recipe);
+    public static ItemStack machine(NodeDefinition<OperationSpec> node, Recipe<?> recipe) {
+        return node.operation().isCampfire() ? campfireMachine(node) : machine(recipe);
     }
     public static Component player(net.minecraft.world.item.crafting.Recipe<?> recipe) {
         if(recipe instanceof ProcessingRecipe<?,?> processing)return player(processing);
         if (recipe instanceof BrewingRecipe) return describe(recipe);
         if(recipe instanceof net.minecraft.world.item.crafting.AbstractCookingRecipe || recipe.getType()==net.minecraft.world.item.crafting.RecipeType.STONECUTTING
-            || dev.graphassembly.integration.smithing.SmithingDefinition.standard(recipe))return describe(recipe);
+            || dev.graphassembly.integration.vanilla.smithing.SmithingDefinition.standard(recipe))return describe(recipe);
         return Component.translatable("graph_assembly.operation.summary",machine(recipe).getHoverName(),describe(recipe));
     }
     public static Component describe(net.minecraft.world.item.crafting.Recipe<?> recipe) {
@@ -81,11 +83,11 @@ public final class StepDescription {
             return names.getSiblings().isEmpty()?List.of():List.of(names);
         }
         var ingredients=recipe instanceof net.minecraft.world.item.crafting.SmithingTransformRecipe
-            ?List.of(((dev.graphassembly.mixin.common.SmithingTransformAccess)recipe).graphAssembly$template(),
-                ((dev.graphassembly.mixin.common.SmithingTransformAccess)recipe).graphAssembly$addition())
+            ?List.of(((dev.graphassembly.mixin.vanilla.SmithingTransformAccess)recipe).graphAssembly$template(),
+                ((dev.graphassembly.mixin.vanilla.SmithingTransformAccess)recipe).graphAssembly$addition())
             :recipe instanceof net.minecraft.world.item.crafting.SmithingTrimRecipe
-                ?List.of(((dev.graphassembly.mixin.common.SmithingTrimAccess)recipe).graphAssembly$template(),
-                    ((dev.graphassembly.mixin.common.SmithingTrimAccess)recipe).graphAssembly$addition())
+                ?List.of(((dev.graphassembly.mixin.vanilla.SmithingTrimAccess)recipe).graphAssembly$template(),
+                    ((dev.graphassembly.mixin.vanilla.SmithingTrimAccess)recipe).graphAssembly$addition())
             :recipe.getIngredients().stream().filter(i->!i.isEmpty()).toList();
         var lines=new ArrayList<Component>();
         for(int i=recipe instanceof net.minecraft.world.item.crafting.SmithingTransformRecipe||recipe instanceof net.minecraft.world.item.crafting.SmithingTrimRecipe?0:1;i<ingredients.size();i++) {

@@ -15,10 +15,10 @@
     {
       "id": "polish",
       "checkpoint": true,
-      "rewards": {
+      "mark_amounts": {
         "polished": 1
       },
-      "reward_limit": 1,
+      "max_mark_applications": 1,
       "recipe": {
         "type": "create:deploying",
         "ingredients": [
@@ -31,10 +31,10 @@
     },
     {
       "id": "quench",
-      "rewards": {
+      "mark_amounts": {
         "quenched": 1
       },
-      "reward_limit": 1,
+      "max_mark_applications": 1,
       "recipe": {
         "type": "create:filling",
         "ingredients": [
@@ -63,7 +63,7 @@
     {
       "id": "finish",
       "finish": true,
-      "rewards": {
+      "mark_amounts": {
         "complete": 1
       },
       "recipe": {

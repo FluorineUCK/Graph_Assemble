@@ -1,6 +1,9 @@
 package dev.graphassembly.client.view;
 
-import dev.graphassembly.core.BranchMode;
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.progress.TransitionResult;
+import dev.graphassembly.core.route.BranchMode;
+
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -25,7 +28,7 @@ class NextStepPresentationTest {
             assertEquals("graph_assembly.branch.none", NextStepPresentation.branchKey(mode, 0));
     }
     @Test void workpieceCountsAvailableStepsRatherThanAllDrawnEdges() {
-        var graph = dev.graphassembly.core.GraphCodec.parse("test:next_step", com.google.gson.JsonParser.parseString("""
+        var graph = dev.graphassembly.codec.GraphCodec.parse("test:next_step", com.google.gson.JsonParser.parseString("""
             {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
              "nodes":[{"id":"s","start":true,"recipe":{"type":"create:pressing"}},
                       {"id":"a","recipe":{"type":"create:cutting","processing_time":20}},
@@ -33,11 +36,11 @@ class NextStepPresentationTest {
                        "workpiece_inputs":[{"item_input":0,"current_nodes":["a"]}]}],
              "edges":[{"from":"s","to":"a"},{"from":"s","to":"b"}]}
             """).getAsJsonObject());
-        var state = dev.graphassembly.core.GraphEngine.complete(graph, null, "s", "minecraft:iron_ingot", () -> 0).state();
-        var allowed = dev.graphassembly.core.GraphEngine.allowed(graph, state);
+        var state = ((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(graph, null, "s", "minecraft:iron_ingot"), () -> 0)).progress();
+        var allowed = GraphPipeline.allowed(graph, state);
         assertEquals(java.util.List.of("a"), allowed);
         assertEquals("graph_assembly.next.single", NextStepPresentation.workpieceKey(allowed.size(), false));
-        assertEquals("graph_assembly.branch.choice", NextStepPresentation.branchKey(BranchMode.CHOICE, graph.outgoing("s").size()),
+        assertEquals("graph_assembly.branch.choice", NextStepPresentation.branchKey(BranchMode.CHOICE, graph.topology().outgoing("s").size()),
             "A static graph describes topology, not a particular workpiece's progress");
     }
 }

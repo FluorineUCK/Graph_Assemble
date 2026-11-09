@@ -2,7 +2,7 @@
 
 [English](kubejs.md) | 简体中文
 
-面向整合包作者与配方作者。本文对应 **Graph Assembly 0.1.1、Minecraft 1.21.1**。工件及结算仅支持物品；已适配机器可将流体作为原生辅助资源。
+这份指南面向整合包和配方作者，适用于 **Graph Assembly 0.1.2、Minecraft 1.21.1**。工件和结算产物只能是物品；已适配机器可以消耗流体辅料。
 
 图装配把一次加工表示为节点，把允许进行的下一道工序表示为有向边。工件在设备间移动时携带当前节点、加工标记与检查点记录，抵达出口后按规则结算。
 
@@ -15,7 +15,7 @@
 5. [构建器 API](#5-构建器-api)
 6. [节点选项](#6-节点选项)
 7. [选择分支](#7-选择分支)
-8. [随机分支、循环与奖励上限](#8-随机分支循环与奖励上限)
+8. [随机分支、循环与标记授予上限](#8-随机分支循环与标记授予上限)
 9. [完成条件与产物结算](#9-完成条件与产物结算)
 10. [附属执行适配与完整原生配方预览](#10-附属执行适配与完整原生配方预览)
 11. [直接 JSON、修改与删除](#11-直接-json修改与删除)
@@ -32,7 +32,7 @@
 | Java | 21 |
 | NeoForge | 开发验证基线 21.1.234 |
 | Create | 6.0.10，开发构建 6.0.10-281；同时安装其所需依赖 |
-| Graph Assembly | 0.1.1 |
+| Graph Assembly | 0.1.2 |
 | KubeJS NeoForge | 开发验证基线 `2101.7.2-build.379` |
 | Rhino | 对应基线 `2101.2.7-build.81` |
 | KubeJS Create（可选） | `2101.3.1-build.18`；提供 `event.recipes.create.*`，基础示例不需要它 |
@@ -50,7 +50,7 @@ kubejs/
 
 配方必须放在 `ServerEvents.recipes(function (event) { ... })` 内。修改后执行 `/reload`；多人环境由服务器加载配方脚本，玩家无需在自己的 `server_scripts` 中重复注册。客户端和服务器都安装 Graph Assembly、Create 及所需依赖；JEI 用于客户端展示。
 
-本文中，所有完整示例均使用独立配方 ID。可先单独启用一个示例，确认结果后再组合。特别注意使用同一原料、同一入口工序的示例，不能同时启用。
+每个完整示例都有独立的配方 ID。先单独启用一个，确认结果后再按需组合。使用同一原料和入口工序的示例不能同时启用。
 
 ## 2. 构建你的第一张图：冲压后切割
 
@@ -76,13 +76,13 @@ ServerEvents.recipes(function (event) {
 });
 ```
 
-对应实际流程如下：
+加工流程：
 
 1. 将铁锭交给动力冲压机：执行入口 `press`，生成携带图进度的铁粒工件。
 2. 将这个工件交给动力锯：执行 `cut`。
 3. `cut` 是出口，且产物规则没有条件，因此结算为一个金锭。
 
-没有图进度的普通铁粒将不能直接进行第二步工序。注意工件物品 ID 与节点 ID 的区别：`minecraft:iron_nugget` 是承载进度的物品，`press`、`cut` 是这张图中的步骤名称。
+没有图进度的普通铁粒不能直接进行第二步。`minecraft:iron_nugget` 是承载进度的物品 ID，`press`、`cut` 则是这张图中的节点 ID。
 
 `my_pack:graph/basic` 是整张配方的 ID，可替换为你想要的命名空间和路径。tips：后续尽量保持配方 ID 与节点 ID 稳定，以便现有工件继续工作，同时也能减少你的工作量 ;-)
 
@@ -100,9 +100,9 @@ ServerEvents.recipes(function (event) {
 
 ### Create 简写工序不填写主工件
 
-对 `.node(id, rawJson, options)` 中下文已适配的 Create 简写类型，系统会自动插入主输入和主输出。`ingredients` **只写辅料**，`results` **只写副产物**，不要重复写当前工件。附加字段由各自的原生 codec 解释。完整原生模板见下节；工作台、熔炉等节点仍按各自小节填写。
+下文已适配的 Create 类型可用 `.node(id, rawJson, options)` 简写。系统会自动插入主输入和主输出，所以 `ingredients` **只写辅料**，`results` **只写副产物**，不要重复写当前工件。附加字段由对应的原生 codec 解析。完整原生模板见下节；工作台、熔炉等节点按各自小节填写。
 
-入口 `.ingredient(...)` 和节点选项 `ingredient` 可使用物品 ID、标签字符串、`Ingredient.of(...)` 或原生 Ingredient JSON，例如 `'minecraft:iron_ingot'`、`'#c:ingots/iron'`、`{ tag: 'c:ingots/iron' }` 旧式 `recipe` JSON 中的辅料仍按原生格式填写，数量简写与 `Fluid.of(...)` 等将交给上游配方构建器解析。
+入口 `.ingredient(...)` 和节点选项 `ingredient` 可使用物品 ID、标签字符串、`Ingredient.of(...)` 或原生 Ingredient JSON，例如 `'minecraft:iron_ingot'`、`'#c:ingots/iron'`、`{ tag: 'c:ingots/iron' }`。旧式 `recipe` JSON 中的辅料仍按原生格式填写，数量简写与 `Fluid.of(...)` 等将交给上游配方构建器解析。
 
 简单结算可写 `.output('2x minecraft:gold_ingot')` 或 `.output(Item.of(...))`，保留数量及物品组件。需要条件、权重、概率或同时产出时，继续使用下文的结算规则与嵌套组。节点 `outputs`、`scrap` 中的物品条目也支持上述简写。
 
@@ -131,11 +131,13 @@ ServerEvents.recipes(function (event) {
 });
 ```
 
-这是完整配方写法：输入包含主件，输出包含代表主件的产物。加工时依照已有图规则替换主物品位置，其余辅料、副产物、流体和原生参数保留；最终产物仍由图结算决定。工序快照不会独立注册为普通配方，后续修改上游构建器也不改变已经嵌入的节点。修改链式参数应放在 `.node(...)` 之前。
+这种写法提供完整配方：输入包含主件，输出包含代表主件的产物。加工时，图规则替换主物品的位置，其余辅料、副产物、流体和原生参数保持不变；最终产物仍由图结算决定。
 
-完整原生 JSON 使用 `.nativeNode(id, json, options)`，并以 `recipe_mode: 'native'` 标记。此模式使用完整定义，不补入主输入；Create 逻辑物品输入 0 仍由当前工件替换。缺省或 `'step'` 沿用简写约定，原 JSON 简写仅适用于 `step`。已有普通配方继续用 `{ type, recipe_id }` 引用，不从 `event.forEachRecipe` 取得对象后交给节点。
+嵌入节点时会保存配方快照，不会另外注册普通配方。之后修改上游构建器不会影响已嵌入的节点，所以链式参数要在 `.node(...)` 之前设置。
 
-可复用 `.processingTime()`、`.heated()`、`.superheated()`、`.keepHeldItem()`、`.xp()`、`.cookingTime()` 等原生参数。普通 `shaped` / `shapeless` 会转为原版合成；`keepIngredient`、`damageIngredient`、`modifyResult`、`noMirror`、`noShrink` 等特殊行为本轮不承接，使用时明确报错。`CreateItem.of(..., chance)` 用于原生工序副产物，不作为图结算简写。
+完整原生 JSON 使用 `.nativeNode(id, json, options)`，该方法会自动设置 `recipe_mode: 'native'`。此模式使用完整定义，不补入主输入；Create 逻辑物品输入 0 仍由当前工件替换。缺省或 `'step'` 沿用简写约定，原 JSON 简写仅适用于 `step`。已有普通配方继续用 `{ type, recipe_id }` 引用，不从 `event.forEachRecipe` 取得对象后交给节点。
+
+可复用 `.processingTime()`、`.heated()`、`.superheated()`、`.keepHeldItem()`、`.xp()`、`.cookingTime()` 等原生参数。普通 `shaped` / `shapeless` 会转为原版合成；当前版本不支持 `keepIngredient`、`damageIngredient`、`modifyResult`、`noMirror`、`noShrink` 等特殊行为，使用时会报错。`CreateItem.of(..., chance)` 用于原生工序副产物，不能用作图结算简写。
 
 完整模板不扩大执行支持范围；不支持的设备仍只能预览。仅需 KubeJS 的完整示例见 [native_recipes.js](../../examples/kubejs/native_recipes.js)。
 
@@ -149,7 +151,7 @@ StartupEvents.registry('item', function (event) {
 });
 ```
 
-随后把配方中的 `GraphAssembly.create('minecraft:iron_nugget')` 改为 `GraphAssembly.create('kubejs:graph_workpiece')`。注册语句只负责物品存在，名称和贴图另行配置；物品一旦携带图进度，其工件堆叠上限由图装配限制为 1。
+随后把配方中的 `GraphAssembly.create('minecraft:iron_nugget')` 改为 `GraphAssembly.create('kubejs:graph_workpiece')`。注册物品后，还需要配置名称和贴图。物品一旦携带图进度，图装配就会将它的堆叠上限设为 1。
 
 ## 4. 完整加工链与设备限制
 
@@ -166,7 +168,7 @@ ServerEvents.recipes(function (event) {
             type: 'create:deploying',
             ingredients: [{ item: 'minecraft:iron_nugget' }],
             keep_held_item: false
-        }, { rewards: { precision: 1 } })
+        }, { mark_amounts: { precision: 1 } })
         .node('wash', {
             type: 'create:filling',
             ingredients: [{
@@ -179,7 +181,7 @@ ServerEvents.recipes(function (event) {
             type: 'create:cutting',
             processing_time: 40,
             results: [{ id: 'minecraft:flint', count: 1, chance: 0.25 }]
-        }, { rewards: { precision: 1 } })
+        }, { mark_amounts: { precision: 1 } })
         .node('mill', {
             type: 'create:milling',
             processing_time: 100
@@ -216,16 +218,21 @@ ServerEvents.recipes(function (event) {
 | `create:milling` | 石磨 |        0 |        0 | 3 |
 | `create:mixing` | 搅拌盆 |  最多 63 |   最多 2 | 3 |
 | `create:compacting` | 盆压缩 |  最多 63 |   最多 2 | 3 |
+| `create:crushing` | 粉碎轮 | 0 | 0 | 6 |
+| `create:sandpaper_polishing` | 手持砂纸／持砂纸机械手 | 0 | 0 | 0 |
+| `create:splashing` | 水洗鼓风 | 0 | 0 | 11 |
+| `create:haunting` | 灵魂火缠魂鼓风 | 0 | 0 | 11 |
+| `create:emptying` | 分液池 | 0 | 0 | 0（另有一份流体输出） |
 
 - 机械手支持 `keep_held_item`；`true` 表示保留手持辅料，具体工具行为仍遵循 Create。
-- 磨粉必须填写大于 0 的 `processing_time`。
-- 注液不能配置副产物；当前执行适配不接受流体主工件、流体结算产物或原生流体输出。
+- 磨粉必须填写大于 0 的 `processing_time`；粉碎沿用原生时间规则，可省略或为 0。粉碎轮也可执行石磨步骤；批量输出放不下时只加工可容纳的部分，剩余原料原样交付，不丢弃工件。
+- 注液不能配置副产物。仅分液池接受原生流体输出；流体仍不能作为主工件或图结算产物。砂纸和分液的物品结算必须装得进一堆；分液池储罐不兼容或空间不足时不消耗、不抽签。
 - 搅拌／盆压缩的原生物品输入上限为 **64（含主件，所以最多 63 个辅助物品 Ingredient）**，物品输出上限为 **4（含主产物，所以最多 3 项副产物）**，最多 2 个辅助流体输入。此为配方容量，不是说盆有 64 个物理库存槽；实际匹配还受库存与输出空间限制。
 - 盆内联 `ingredients` 可混合物品与流体；保留原生 `heat_requirement`，例如 `'heated'`、`'superheated'`。需要热量时必须实际提供对应热源，图配方不会绕过它。
 - 超过设备容量的配方会禁用整张图的执行，不会静默忽略多余材料。
 - 设备会检查输出空间；动力锯的大批量加工可能因最坏输出数量超过容量而等待，需要上游分批投入。
 
-附属配方沿用第 4 节所列受支持的原生类型时，按相同规则校验；自定义加工类型不启用图执行。Create 对标准原版配方的替代设备接纳见下表。任意原生配方的**图内预览**本身都不构成执行支持。
+附属配方使用第 4 节列出的原生类型时，按相同规则校验。自定义加工类型需要单独适配，能在图中预览不代表设备能执行。标准原版配方可用哪些 Create 替代设备，见下表。
 
 ### 使用 Create 的替代设备
 
@@ -281,7 +288,7 @@ ServerEvents.recipes(function (event) {
 
 ### 原版染色与修理
 
-背包、工作台及原版合成器支持确切原生 `ArmorDyeRecipe`（`minecraft:crafting_special_armordye`）和 `RepairItemRecipe`（`minecraft:crafting_special_repairitem`）。沿用原生匹配与结果，不新增格式版本。
+背包、工作台及原版合成器支持原生 `ArmorDyeRecipe`（`minecraft:crafting_special_armordye`）和 `RepairItemRecipe`（`minecraft:crafting_special_repairitem`）这两个具体配方类。匹配和结果沿用原生规则。
 
 染色时被染物是唯一主工件（逻辑输入 0）；每个非空染料格按从左到右、从上到下编号为辅助输入 1、2……。修理时第一件非空物品为主工件，第二件为辅助工件；分别校验，只有主件进度被继承。原生修理会移除名称和普通附魔；诅咒与耐久按原生结果处理。
 
@@ -294,7 +301,7 @@ ServerEvents.recipes(function (event) {
 .node('repair', { type: 'minecraft:crafting_special_repairitem', category: 'misc' })
 ```
 
-Create 的特殊图步骤未开放；其他特殊合成未开放。
+Create 特殊图步骤和其他特殊合成尚未接入。
 
 ### 酿造台
 
@@ -319,7 +326,9 @@ Create 的特殊图步骤未开放；其他特殊合成未开放。
 })
 ```
 
-每瓶独立推进和抽取下一步／结算产物，共用材料只消耗一份。材料主件模式中，各瓶从同一材料进度出发，后续互不影响；瓶主件模式中，各瓶保留各自历史。瓶子和带进度材料都须为一件。辅件若也带进度，须声明 `workpiece_inputs: [{ item_input: 1 }]`，双方分别校验，只继承主件进度。
+每瓶独立推进，并分别抽取下一步或结算产物；共用材料只消耗一份。材料作主件时，各瓶从同一份材料进度出发，后续互不影响；瓶子作主件时，各瓶保留自己的历史。
+
+瓶子和带进度的材料都只能有一件。辅件若也带进度，须声明 `workpiece_inputs: [{ item_input: 1 }]`。双方分别校验，结果只继承主件进度。
 
 任一带进度输入不满足角色、路径或原生酿造条件，整轮不加工。材料主件模式中，未被图认领的普通瓶保持不变；瓶主件配普通材料时，可混合的普通瓶仍按原生规则酿造。
 
@@ -457,9 +466,29 @@ ServerEvents.recipes(function (event) {
 
 其他动态合成、未知配方子类和附属锻造菜单不随此项开放。
 
+
+### 新增加工步骤：不手写 custom
+
+完整脚本见 [additional_create_steps.js](../../examples/kubejs/additional_create_steps.js)。粉碎 → 砂纸 → 洗涤 → 缠魂 → 分液这条加工链可在对应设备上执行，也可用 `.sequence(...).step(...)` 放入原生序列。
+
+```js
+// 以下均是 step 模式 recipe 片段，不要重复填主输入／主物品输出。
+const crushing = {type: 'create:crushing', processing_time: 100};
+const polishing = {type: 'create:sandpaper_polishing'};
+const washing = {type: 'create:splashing'};
+const haunting = {type: 'create:haunting'};
+const emptying = {type: 'create:emptying', results: [{id: 'minecraft:water', amount: 250}]};
+```
+
+分液的 `{id, amount, components?}` 描述 Create 原生流体结果，不属于图出口成品池。进度仍由物品携带：每轮消耗一个主工件，将流体送入储罐，再按图规则或外层原生序列交付物品。消耗输入前会检查储罐容量、流体组件，并核对输入是否与快照一致。
+
+完整原生分液配方或 `recipe_id` 引用需保留物品和流体两种结果。完成步骤时，主物品结果会替换为携带进度的工件或结算产物。
+
+砂纸保留原生使用时长、耐久与机械手工具消耗；洗涤和缠魂保留原生鼓风计时和完成锁，连续暴露不会立刻反复推进，下一轮需重新输送工件。
+
 ## 5. 构建器 API
 
-除 `build()` 外，以下方法均返回构建器，可继续链式调用：
+编写方法返回构建器；`build()` 返回 JSON，`register()` 返回已注册的 `KubeRecipe`：
 
 | 方法 | 参数与作用 |
 |---|---|
@@ -474,7 +503,7 @@ ServerEvents.recipes(function (event) {
 | `.output(rule)` | 追加图级结算规则，也接受物品字符串、ItemStack 或等权候选数组，可多次调用 |
 | `.build()` | 校验图结构并返回 JSON 副本；**不会自行注册配方** |
 
-最后必须调用 `event.custom(graph.build()).id('命名空间:路径')` 注册。
+可直接调用 `graph.register(event, '命名空间:路径')` 注册；原有 `event.custom(graph.build()).id('命名空间:路径')` 流程仍然支持。
 
 注意：
 
@@ -483,7 +512,65 @@ ServerEvents.recipes(function (event) {
 - 同一对节点不能重复添加相同方向的边。自环使用 `.edge('loop', 'loop')`，不要用同名端点调用 `bidirectionalEdge`。
 - 权重必须是有限正数，不能是 0、负数、`NaN` 或 `Infinity`。
 - `build()` 校验图格式与引用关系；物品、原生配方解码、设备适配和冲突还会在游戏加载配方时检查。通过 `build()` 不等于设备一定能执行。
-- 构建器不生成 `format_version`；没有 `formatVersion()`、`chance()`、`requirements()` 等额外链式方法。条件放进 `.output(...)`，节点配置放进 `.node(...)` 的第三个参数。
+- 构建器没有图级 `chance()` 方法；权重和概率写在产物条目中。
+
+### 链式注册、条件与出口产物池
+
+| 方法 | 作用 |
+|---|---|
+| `.register(event, id)` | 校验并在内部调用 KubeJS 注册，返回 `KubeRecipe`；ID 必须带命名空间 |
+| `.finishOutput(nodeId, results[, requirements])` | 将已有节点标记为出口，追加一条节点级结算规则 |
+| `.scrap(nodeId, results)` | 追加节点级兜底废料 |
+| `.requirements(nodeId, requirements)` | 设置逻辑主物品输入 `0` 的条件，保留其 `current_nodes`、所有辅助工件角色和其他节点字段 |
+| `.conditionalEdge(from, to, requirements[, weight])` | 添加条件有向边，默认权重为 `1` |
+| `.branchMode(nodeId, mode)` | 设置已有节点的 `choice` / `random` 分支模式 |
+| `.progressAction(nodeId, action)` | 追加标准 `progress_actions` 动作 |
+
+先添加节点，再按 ID 配置。出口规则和废料都以**追加**方式加入，不覆盖已有配置。匹配的图级规则与当前出口规则一起组成产物池，节点规则不会覆盖全局规则。废料池仅在 `finish_mode: 'strict'` 且没有匹配的成功产物规则时使用；宽容出口不会使用它。
+
+```js
+ServerEvents.recipes(function (event) {
+    GraphAssembly.create('minecraft:iron_nugget')
+        .ingredient('minecraft:raw_gold')
+        .node('press', {type: 'create:pressing'}, {start: true, mark_amounts: {quality: 1}})
+        .node('finish', {type: 'create:cutting'}, {finish_mode: 'strict'})
+        .requirements('finish', {marks: {quality: 1}})
+        .conditionalEdge('press', 'finish', {marks: {quality: 1}}, 2)
+        .finishOutput('finish', [{item: 'minecraft:diamond', weight: 3}, {item: 'minecraft:emerald', weight: 1}])
+        .scrap('finish', 'minecraft:flint')
+        .register(event, 'my_pack:fluent_graph');
+});
+```
+
+这些方法使用同一套 `requirements` 格式。标记默认精确匹配，`mode: 'partial'` 允许额外标记；检查点、计数和范围条件的含义不变。
+
+边条件检查源节点完成后的工件状态，包括本次奖励、检查点和进度动作。随机分支先筛选边条件，再预检目标主工件条件和标记容量，最后按剩余候选的权重抽取。没有可用边时不抽签，工件停工。目标实际加工前仍会复查；辅料和机器状态不参与提前抽签。
+
+`.requirements()` 只设置主工件条件，不改变输入角色，也不合并辅助工件进度。双工件仍须显式配置 `workpiece_inputs`，结果只保留主工件历史。
+
+### 原生 Create 序列构建器
+
+`GraphAssembly.sequence(transitionalItem)` 生成真正的 `create:sequenced_assembly`，由 Create 执行循环。支持 `.ingredient(value)`、`.step(recipe[, options])`、`.loops(正整数)`、`.output(results)`、`.build()` 和 `.register(event, id)`。
+
+每步生成一个 `graph_assembly:sequence_step` 包装，步骤选项只接受 `recipe_mode` 和 `campfire`。外层 Create 配方负责循环、原生进度组件和最终结果选择。序列至少需要一个步骤和一个产物。
+
+```js
+ServerEvents.recipes(function (event) {
+    GraphAssembly.sequence('minecraft:iron_nugget')
+        .ingredient('minecraft:iron_ingot')
+        .step(event.smelting('minecraft:iron_nugget', 'minecraft:iron_ingot').cookingTime(60))
+        .step({type: 'create:pressing'})
+        .loops(2)
+        .output(Item.of('minecraft:iron_pickaxe', 1, {'minecraft:damage': 5}))
+        .register(event, 'my_pack:fluent_sequence');
+});
+```
+
+新建的 `KubeRecipe` 会在调用 `.step()` 时保存独立快照，并标记为 synthetic，因此不会单独注册。之后修改原对象不会影响该步骤。KubeJS 回调和原料动作不受支持，使用时会报错。
+
+ItemStack 和组件沿用图产物的规范化方式，但序列产物使用 Create 原生 `{id, count, components, chance}`，不接受图的 `weight` 或分组。原生序列的 `chance` 是相对产物权重，可以大于 `1`。多次调用 `.output()` 会追加产物。
+
+仍可使用 `.build()` 配合 `event.custom(...)` 注册。完整脚本见[链式编写示例](../../examples/kubejs/fluent_authoring.js)。
 
 ## 6. 节点选项
 
@@ -496,8 +583,8 @@ ServerEvents.recipes(function (event) {
 | `finish` | `false`；出口标记，可与 `start` 同时为 `true` |
 | `ingredient` | 入口继承图级原料；可为不同入口单独指定；非入口不用于下一步匹配 |
 | `transitional_item` | 首次加工默认用图级工件，后续默认保留当前物品；显式值替换成功加工后的工件物品 |
-| `rewards` | `{}`；成功加工增加的标记，如 `{ precision: 1 }` |
-| `reward_limit` | 不填写为无限；限制**此节点为每个工件发放奖励的次数**，不是限制加工次数；0 表示不发奖 |
+| `mark_amounts` | `{}`；成功加工增加的标记，如 `{ precision: 1 }` |
+| `max_mark_applications` | 不填写为无限；限制**此节点为每个工件授予标记的次数**，不是限制加工次数；0 表示不授予标记 |
 | `checkpoint` | 普通节点默认 `false`；入口和出口始终记录检查点，即使填写 `false` |
 | `branch_mode` | `'choice'`；也可为 `'random'`，控制本节点加工完成后的出边 |
 | `finish_mode` | `'lenient'`；也可为 `'strict'`，控制出口未匹配任何结算规则时的行为 |
@@ -508,13 +595,15 @@ ServerEvents.recipes(function (event) {
 | `position` | 自动布局；可写 `[x, y]`，平面画布中心为原点，x 向右、y 向下 |
 | `sphere_position` | 自动球面布局；可写非零 `[x, y, z]`，归一化为球面方向 |
 
-标记名由作者自行定义，不需要提前注册。奖励和上限必须是 `0..2147483647` 的整数；累计奖励将溢出时，该步骤会在消耗材料前停工，不会回绕或截断。
+标记名由作者自行定义，不需要提前注册。标记增量和授予上限必须是 `0..2147483647` 的整数；累计标记将溢出时，该步骤会在消耗材料前停工，不会回绕或截断。
 
-布局坐标只影响预览，不决定加工顺序。加工必须符合当前合法路线，双工件须分别检查：已保存的指定路线（`pending_route`）优先；没有指定路线时遵守随机锁，没有锁时才按普通出边。`progress_actions` 的改道可覆盖普通出边或随机抽签，但目标自己的输入条件仍需满足。宽容出口未匹配结算规则时保留加工后的工件进度，并优先遵循指定路线；没有指定路线时才按出边继续，不能回滚到加工前状态。成功加工后的顺序为奖励 → 追加检查点 → `progress_actions` → 出口结算 → 未结算路线处理。
+`mark_amounts` 指定每次成功加工增加的标记数量。`max_mark_applications` 限制该节点为每件工件授予标记的次数，达到上限后仍可加工。工件状态中的 `mark_grant_counts` 记录各节点已授予的次数，不是节点选项。清除标记不会重置这些次数；一次增加多个标记只计一次。非空映射即使增量全为 0，也会计一次；空映射不计次。
+
+布局坐标只影响预览，不决定加工顺序。加工必须符合当前合法路线，双工件须分别检查：已保存的指定路线（`pending_route`）优先；没有指定路线时遵守随机锁，没有锁时才按普通出边。`progress_actions` 的改道可覆盖普通出边或随机抽签，但目标自己的输入条件仍需满足。宽容出口未匹配结算规则时保留加工后的工件进度，并优先遵循指定路线；没有指定路线时才按出边继续，不能回滚到加工前状态。成功加工后的顺序为标记授予 → 追加检查点 → `progress_actions` → 出口结算 → 未结算路线处理。
 
 ### 多工件盆合并示例
 
-将仓库的完整脚本 [`examples/kubejs/multi_workpiece.js`](../../examples/kubejs/multi_workpiece.js) 单独复制到 `kubejs/server_scripts/`，执行 `/reload`。它使用既有 `.node(..., options)` 和 `.output(...)`，不需要新 Builder 方法。该示例已在真实 KubeJS 环境加载；不要与入口条件重叠的图同时启用。
+将完整脚本 [`examples/kubejs/multi_workpiece.js`](../../examples/kubejs/multi_workpiece.js) 单独复制到 `kubejs/server_scripts/`，执行 `/reload`。它使用 `.node(..., options)` 和 `.output(...)`，不需要其他构建器方法。该示例已在实际 KubeJS 环境中加载验证；不要与入口条件重叠的图同时启用。
 
 实际准备和加工两件**同图**工件：
 
@@ -547,7 +636,7 @@ ServerEvents.recipes(function (event) {
 - `current_nodes` 可省略，表示不增加“当前节点在列表内”的限制；提供时必须非空、无重复且引用本图节点。即使省略，也必须符合当前的指定路线／随机锁／普通出边规则。
 - 角色 `requirements` 针对该件输入自己的标记和完整检查点。普通未声明辅助输入不得携带图进度，不能偷偷拿另一张图或不合格工件顶替普通材料。
 - 角色 0 可不显式声明，主工件仍遵循正常遍历规则；显式声明角色 0 后必须使用已入图工件，不能用普通入口原料充当它。
-- 只有主件推进后的进度进入主产物；辅助件的标记、检查点、奖励次数和锁不合并，副产物不克隆图进度。保留还是消费仍遵循机器原生规则，例如机械手 `keep_held_item`。
+- 只有主件推进后的进度进入主产物；辅助件的标记、检查点、标记授予次数和锁不合并，副产物不克隆图进度。保留还是消费仍遵循机器原生规则，例如机械手 `keep_held_item`。
 
 该脚本的两个出口条件分别要求：
 
@@ -556,7 +645,7 @@ ServerEvents.recipes(function (event) {
 | `body → join → finish` | `min: 2, max: 2` | `max: 0` | 绿宝石 |
 | `body → polish → join → finish` | `min: 4, max: 4` | `min: 1, max: 1` | 钻石 |
 
-脚本还用原有 `checkpoints` 的 `partial` 条件要求有序经过主路线。数量范围与旧条件同时成立才结算，不会因为只达到质量就忽略路线；字段规则见第 9 节。
+脚本用 `checkpoints` 的 `partial` 条件要求主工件按顺序经过指定路线。数量范围和路线条件必须同时满足，只达到质量要求还不能结算。字段规则见第 9 节。
 
 ### 加工后清除与改道
 
@@ -573,7 +662,7 @@ ServerEvents.recipes(function (event) {
 })
 ```
 
-这是构建器片段，`inspect` 必须在同一张图中定义。省略 `clear_mark.count` 清空该标记；填非负整数则扣除相应数量，不足清零，0 不变。
+这是构建器片段，`inspect` 必须在同一张图中定义。省略 `clear_mark.count` 会清空该标记；填写非负整数则扣除相应数量。数量不足时清零，填 0 则保持不变。
 
 其他操作：
 
@@ -581,9 +670,9 @@ ServerEvents.recipes(function (event) {
 - `{ type: 'pop_checkpoint' }`：删除最近一条检查点记录，空列表不变。
 - `{ type: 'enter_edge', from: 'inspect', to: 'finish' }`：选择已有的 `inspect → finish` 边，下一步加工 `finish`。不执行 `inspect`，也不补记它的进度。
 
-每节点最多一个 `goto_node` 或 `enter_edge`。加工成功后先发放奖励、追加本次检查点，再按列表顺序操作，最后结算；已结算则不再改道。Start / finish 自动记检查点，所以在它们上面执行 `pop_checkpoint` 删除的是本次记录。
+每个节点最多配置一个 `goto_node` 或 `enter_edge`。加工成功后，先授予标记、追加本次检查点，再按列表顺序执行动作，最后结算；已结算的工件不再改道。入口和出口会自动记录检查点，在这些节点执行 `pop_checkpoint` 会删除本次记录。
 
-改道会覆盖普通出边和随机抽签，但不豁免目标输入条件。入口、近期加工历史、奖励授予次数保持原值，不退还材料；双工件只修改主工件。目标的 `current_nodes` 检查真实刚完成的节点，而非所选边的起点。`goto_node` 只指定下一工序，不等于跳过目标的加工、入口材料或结算条件。
+改道会覆盖普通出边和随机抽签，但不豁免目标输入条件。入口、近期加工历史、标记授予次数保持原值，不退还材料；双工件只修改主工件。目标的 `current_nodes` 检查真实刚完成的节点，而非所选边的起点。`goto_node` 只指定下一工序，不等于跳过目标的加工、入口材料或结算条件。
 
 完整数据包示例见 [progress-actions.json](../../examples/datapack/progress-actions.json)，放到 `data/my_pack/recipe/progress_actions.json` 后可单独测试：
 
@@ -629,7 +718,7 @@ ServerEvents.recipes(function (event) {
 
 同样，不同图的入口若在同一设备上接受相同原料与辅助条件，也会冲突。发布示例时使用不同入口原料，或仅启用其中一个。
 
-## 8. 随机分支、循环与奖励上限
+## 8. 随机分支、循环与标记授予上限
 
 随机模式写在**出边源节点**上。权重决定下一步，而不是最终产物概率。
 
@@ -641,8 +730,8 @@ ServerEvents.recipes(function (event) {
         .node('polish', {
             type: 'create:cutting', processing_time: 40
         }, {
-            rewards: { quality: 1 },
-            reward_limit: 3,
+            mark_amounts: { quality: 1 },
+            max_mark_applications: 3,
             checkpoint: true,
             branch_mode: 'random'
         })
@@ -665,7 +754,7 @@ ServerEvents.recipes(function (event) {
 
 每次完成 `polish` 后，按 3:1 抽取下一步：75% 再切割一次，25% 前往出口冲压。抽中后目标保存在工件中，查询 JEI、过滤器或重新加载配方不会重新抽签；需要把工件送往锁定目标对应的设备。
 
-奖励最多发放三次，之后仍可继续循环。出口加工完成时，`quality >= 3` 得钻石，否则严格失败产生枯萎的灌木。循环不是定时自动执行：每次仍需设备完成加工。
+标记最多授予三次，之后仍可继续循环。出口加工完成时，`quality >= 3` 得钻石，否则严格失败产生枯萎的灌木。循环不是定时自动执行：每次仍需设备完成加工。
 
 ## 9. 完成条件与产物结算
 
@@ -680,7 +769,7 @@ ServerEvents.recipes(function (event) {
 | `requirements` | 可选，标记／检查点匹配、标记范围与检查点次数范围 |
 | `results` | 必填、非空，候选产物数组 |
 
-只有完成 `finish: true` 的节点才尝试结算。先增加该节点奖励、记录检查点，再执行 `progress_actions`，然后判断规则；条件可以包含当前出口和本次新增加的标记。若操作清除了相关标记或检查点，条件看到的是操作后的当前保留状态。
+只有完成 `finish: true` 的节点才尝试结算。先授予该节点标记、记录检查点，再执行 `progress_actions`，然后判断规则；条件可以包含当前出口和本次新增加的标记。若操作清除了相关标记或检查点，条件看到的是操作后的当前保留状态。
 
 ### 条件写法
 
@@ -732,13 +821,13 @@ ServerEvents.recipes(function (event) {
 - 区间**包含两端**；每个区间至少提供 `min` 或 `max` 一端。省略下限是 0，省略上限是 `2147483647`；端点须为该范围内的整数，且下限不能高于上限。
 - `quality: { min: 3 }` 是至少 3；`quality: { max: 3 }` 是 0～3；`{ min: 3, max: 3 }` 是恰好 3；`{ max: 0 }` 是必须为 0。缺失的标记或未记录的检查点按 0 计算。
 - `checkpoint_counts: { polish: { max: 0 } }` 可用于“禁止抛光路线”，前提是 `polish` 确实设了 `checkpoint: true`。普通非检查点节点加工过也不产生检查点，不能靠计数判断是否经过。
-- 次数统计当前保留的完整检查点序列（清除或弹出的记录不再计入），不是 Tooltip 的最近三步，也不是 `reward_limit` 的奖励次数。入口／出口自动计入，重复访问检查点会重复计数；检查点键必须引用图中存在的节点。
+- 次数统计当前保留的完整检查点序列（清除或弹出的记录不再计入），不是 Tooltip 的最近三步，也不是保存在 `mark_grant_counts` 中的各节点授予次数。入口／出口自动计入，重复访问检查点会重复计数；检查点键必须引用图中存在的节点。
 - 四类条件 `marks`、`checkpoints`、`mark_ranges`、`checkpoint_counts` 同时配置时取 **AND**。范围只约束列出的名称，不改变旧 exact / partial / unordered 语义，也不受公共 `mode` 影响。
 - 省略条件就不检查。空范围映射如 `mark_ranges: {}` 不添加限制，但单个范围如 `quality: {}` 非法；这与旧 `marks: {}` 的默认 exact 空标记要求不同。
 
 ### 默认加权选一；用嵌套组表达同时与独立概率产出
 
-图级规则与当前出口规则中，所有满足条件的 `results` 的**最外层条目**合并成一个加权池，选中一个条目后递归执行。每条规则不是独立抽奖，也不是先写的优先。普通物品条目的旧行为不变；组条目可以同时产出多种物品。
+所有匹配的图级规则和当前出口规则，其 `results` 的**最外层条目**会合并为一个加权池。系统只抽取一个条目，再递归执行它；不会每条规则各抽一次，也没有按书写顺序排列的优先级。普通物品条目按原有方式产出，组条目则可以同时产出多种物品。
 
 例如以下规则片段中，如果它是唯一匹配规则，则 75% 得两个金锭，25% 得一个铁锭：
 
@@ -771,17 +860,17 @@ ServerEvents.recipes(function (event) {
 - 成功规则被选中但概率全部未命中，仍然结束图装配，不触发废品池。空 `all` 组也可显式表示无物品产出；空 `weighted` 组非法。
 - `scrap` 支持完全相同的嵌套结构。只在严格出口没有匹配成功结果池时使用。
 - 物品条目只允许 `item/count/weight/components/chance`；组只允许 `mode/results/weight/chance`。字段拼写错误会按具体 JSON 路径报错。
-- 额外工序 `recipe.results` 仍是**独立于结算**的原生副产物，失败或成功概率为空时也不会取消。图结算中的物品继续用 `item`，不是原生 `id`。
+- 工序 `recipe.results` 是**独立于结算**的原生副产物。即使结算失败，或成功规则因概率判定没有产物，副产物也不会取消。图结算的物品键使用 `item`，原生配方使用 `id`。
 
-可直接复制 [嵌套概率示例](../../examples/kubejs/nested_probability_outputs.js)：固定钻石、独立 0～3 个绿宝石与概率金锭，并附加 `weighted → all → weighted` 奖励。示例的成功规则无条件，因此其废品示范需给成功规则添加条件后才会触发。
+可直接复制 [嵌套概率示例](../../examples/kubejs/nested_probability_outputs.js)：固定钻石、独立 0～3 个绿宝石与概率金锭，并附加 `weighted → all → weighted` 产物。示例的成功规则无条件，因此其废品示范需给成功规则添加条件后才会触发。
 
 **设备容量：** 同时产出的最大组合会在工作盆、石磨和切割中预留；空间不足保留输入，不通过重抽避开大组合。注液器是单物品堆 API：当前工件若可能结算出多个物品堆，该步骤不执行、不消耗物品或流体；把多产物出口放在冲压、机械手、工作盆或其他支持结果列表的设备上。普通注液步骤及单堆结算不受影响。
 
-**JEI：** 候选数量合并显示，如 `0-3`；整组概率的离散数量保持 `0,3`，不误写成连续范围。候选图标代表产出条目，不是同物品多个奖励累加后的总数。Info 页列出组路径、局部权重和概率语义，悬浮说明保留所属组。
+**JEI：** 候选数量合并显示，如 `0-3`；整组概率的离散数量保持 `0,3`，不误写成连续范围。候选图标代表产出条目，不是同物品多个产物累加后的总数。Info 页列出组路径、局部权重和概率语义，悬浮说明保留所属组。
 
 ### 出口没有任何规则匹配时
 
-- `lenient`：保留本次加工后的工件、奖励、检查点及 `progress_actions` 操作结果；有已保存的指定路线（`pending_route`）时优先按它继续，否则按随机锁／出口出边继续，只有既无指定路线也无出边时才等待，不能自动返回先前节点。目标仍需实际成功加工并满足相应条件。
+- `lenient`：保留本次加工后的工件、标记、检查点及 `progress_actions` 操作结果；有已保存的指定路线（`pending_route`）时优先按它继续，否则按随机锁／出口出边继续，只有既无指定路线也无出边时才等待，不能自动返回先前节点。目标仍需实际成功加工并满足相应条件。
 - `strict`：消耗主工件，从 `scrap` 池抽取一个条目；未配置 `scrap` 时没有主产物。宽容出口不会使用 `scrap`。
 - 工序副产物独立保留，不因结算失败而撤销。
 
@@ -795,7 +884,7 @@ CCB、Fantasizing 专用执行适配已撤下，不再承诺相关机器保护�
 
 ### 完整原生配方引用：预览与已验证执行路径
 
-`recipe_id` 引用已加载的完整原生配方，按其自身 CODEC 保留附加字段，不猜测各附属的 JSON 格式。**只有已有执行适配的设备类型可以据此加工**；识别到 serializer、`ProcessingRecipe` 或 `IAssemblyRecipe` 不会自动授予执行能力。其他类型仍仅可预览。
+`recipe_id` 引用已加载的完整原生配方，由该配方自身的 CODEC 读取并保留附加字段，无需逐一编写附属模组的 JSON 解析。**执行仍需要对应设备的适配**；仅识别到 serializer、`ProcessingRecipe` 或 `IAssemblyRecipe` 不会启用图加工，其他类型只能尝试预览。
 
 以下完整脚本引用 Create 自带的注液配方，展示甜浆果和 250 mB 巧克力两个输入：
 
@@ -821,13 +910,15 @@ ServerEvents.recipes(function (event) {
 - 展示保留原生 JEI 定义；执行使用独立原生副本，将逻辑物品输入 0 作为主工件、产物 0 替换为图进度／结算产物，其余原生材料、流体条件及副产物仍保留。原始配方不被修改。
 - 图内使用原生 JEI 布局和材料提示。材料槽可以查询配方/用途，原生流体字段保留其类型与数量；没有附属模组专用倍率参数。
 - 图底部的结算产物仍来自 `.output(...)`，不会自动复制原生配方输出。
-- 已适配类型可用引用模式，仍须通过设备的角色、容量、流体产物等验证；不满足则整图禁用并输出原因。它不是任意机器自动兼容开关。
+- 已适配类型也必须通过设备的角色、容量和流体产物等检查，才能执行引用配方。任一检查失败都会禁用整张图并报告原因；引用配方不能代替设备适配。
 - 原生引用删除、同 ID 替换或数据包重载会撤销旧图操作。发布／改配方请使用正常数据包重载；直接替换 RecipeManager 不保证第三方私有配方索引会重建。
 - 目标配方不存在、serializer 不匹配或所需模组未安装时，无法建立该引用；没有可匹配原生 JEI 布局时，节点保留不可用提示。
 
-通用预览读取原生 JEI 布局，不按模组名称启用执行。原生布局缺失或创建失败时，节点保留不可用提示。
+通用预览读取原生 JEI 布局，不按模组名称启用执行。布局缺失或创建失败时，节点会显示不可用提示。
 
-原生机器能在图内预览，不代表它已获得图执行适配。多工件合并仅限已明确适配路径并需角色声明，流体仍不能承载图进度。当前可执行范围为第 4 节的七种 Create 加工、背包／工作台与合成器标准合成、三种原版熔炉加工、营火、原版切石机、标准锻造、染色／修理／纹饰、原版铁砧及酿造台；其中满足第 4 节对应条件的节点也可由 Create 替代设备执行，包括鼓风烟熏与熔炼；范围见第 4 节。
+第 4 节列出了当前执行范围：十二种 Create 加工、背包／工作台与合成器标准合成、三种原版熔炉加工、营火、原版切石机、标准锻造、染色／修理／纹饰、原版铁砧及酿造台。符合相应条件的节点也可在 Create 替代设备上执行，包括鼓风烟熏与熔炼。
+
+多工件合并需要对应路径的适配和明确的角色声明；流体不能承载图进度。能显示原生配方预览，不代表该设备已支持图执行。
 
 ## 11. 直接 JSON、修改与删除
 
@@ -854,12 +945,6 @@ ServerEvents.recipes(function (event) {
 ```
 
 此例与第 2 节使用同一原料和冲压入口，**二选一启用**。
-
-### 开发期旧脚本清理
-
-`format_version` 已取消，填写任何值都会报错，包括原先的 2。已使用 `requirements` 的脚本只需删除该顶层字段；构建器会自动生成无版本字段的 JSON。
-
-更早的格式 1 还有条件层级与默认值差异：规则上的 `marks` / `checkpoints` 要移入 `requirements`；如果原来省略 `marks`，但仍希望保持“必须没有标记”，需显式添加 `requirements: { marks: {} }`。当前省略条件表示不检查，并不要求为空。完整说明见 [开发期旧文件清理](../reference/recipe-format.zh_cn.md#开发期旧文件清理)。本模组不自动转换旧配方或旧工件。
 
 ### 删除已有图
 
@@ -891,7 +976,6 @@ ServerEvents.recipes(function (event) {
 |---|---|
 | `GraphAssembly is not defined` | 确认装的是本模组与对应 KubeJS 版本，脚本在服务器侧；查看插件加载日志 |
 | `.build()` 报节点或字段路径错误 | 检查节点唯一性、边目标、入口原料及 `requirements` 层级；`graph_assembly:script_validation` 是构建器的校验名称，不是最终配方 ID |
-| `graph.format_version: Remove format_version...` | 删除旧的顶层版本字段；如果来自早期格式 1，还需按第 11 节整理条件层级与默认值 |
 | 能在 JEI 看见，设备不加工 | 检查是否为仅预览引用或不支持设备；查看兼容性命令，不以“能显示”判断可执行 |
 | `Deploying requires exactly one auxiliary item ingredient` | 机械手的内联 `ingredients` 只填一个辅料，不填主工件 |
 | `Spout requires exactly one fluid ingredient...` | 流体放在 `ingredients` 中，恰好一个，不填写副产物 |
@@ -912,7 +996,7 @@ ServerEvents.recipes(function (event) {
 - [ ] 固定并说明 Minecraft、加载器、Create、KubeJS、Rhino 与可选 JEI 版本。
 - [ ] 分发需要的 `server_scripts`；使用自定义物品时一并分发 `startup_scripts`、名称与贴图资源。
 - [ ] 关闭演示脚本及相同入口的重复配方，替换示例命名空间与产物。
-- [ ] 清理旧 `format_version` 字段；所有结算条件统一写在 `requirements` 内。
+- [ ] 所有结算条件统一写在 `requirements` 内。
 - [ ] 检查没有被禁用的生产图，逐条测试入口、分支、辅料、输出容量及出口条件。
 - [ ] 多工件图分别测试两路制备、同图角色与错误角色拒绝；确认只有主质量／历史继承，范围端点和禁止访问条件符合预期。
 - [ ] 将仅预览图与可执行配方分开说明，不把第三方预览列成设备执行兼容。
@@ -922,7 +1006,9 @@ ServerEvents.recipes(function (event) {
 
 可直接复制 [三路径脚本](../../examples/kubejs/three_path_outputs.js)，操作流程和独立失败池见 [三路径说明](examples/three-path-outputs.zh_cn.md)。同一粗铁入口经切割、机械手或注液路线，分别在自己的严格出口结算铁锭、金锭或钻石；过度加工或次数不足进入对应出口的废品池。
 
-`scrap` 绑定 finish，因此本例使用三个 finish，不新增条件废品字段。各 finish 的 `outputs` 检查有序路径、标记范围和 checkpoint 次数，图级 `outputs` 保持空，避免无条件规则绕过失败。UI 默认总览同时展示成功候选；选择 finish 后只显示该出口的成功候选和失败池，候选较多时通过 `+N` 展开。完整条件仍在 JEI 原生 Info 页。入口候选不是整条图的完整耗材表，辅工件／流体等请查看节点详情。
+`scrap` 属于出口节点，所以本例使用三个出口，不需要条件废品字段。各出口的 `outputs` 检查有序路径、标记范围和检查点次数；图级 `outputs` 保持为空，避免无条件规则让本应失败的工件也能成功结算。
+
+界面默认总览显示所有成功候选。选中一个出口后，只显示它的成功候选和废品池；候选较多时可用 `+N` 展开。完整条件在 JEI 原生 Info 页查看。入口候选只列入图原料，辅助工件、流体等耗材请查看节点详情。
 
 出口列表过长时，可拖动右侧 Create 原生滚动条、点击轨道或使用滚轮；候选物品弹层使用翻页按钮或 PageUp/PageDown。窗口缩放后仍保留选中的出口和图视角；弹层中的物品继续支持 JEI 原生配方/用途查询。
 
@@ -946,9 +1032,9 @@ ServerEvents.recipes(function (event) {
 
 ### 用 KubeJS 替换，而非重复注册
 
-需要定制时，将 [filter_crafting.js](../../examples/kubejs/filter_crafting.js) 复制到实例的 `kubejs/server_scripts/`，然后 `/reload`。脚本按 ID 删除内置配方，再以 **同一个** `graph_assembly:graph_filter` ID 注册完整图；七种虫蚀物品通过 `ServerEvents.tags('item', ...)` 加入同名标签。两个专用半成品由本模组注册，不需要额外 `startup_scripts`。不填写 `format_version`，不将此图改名后与内置图同时启用，否则相同入口会产生歧义。
+需要定制时，将 [filter_crafting.js](../../examples/kubejs/filter_crafting.js) 复制到实例的 `kubejs/server_scripts/`，然后 `/reload`。脚本按 ID 删除内置配方，再以 **同一个** `graph_assembly:graph_filter` ID 注册完整图；七种虫蚀物品通过 `ServerEvents.tags('item', ...)` 加入同名标签。两个专用半成品由本模组注册，不需要额外 `startup_scripts`。不要将此图改名后与内置图同时启用，否则相同入口会产生歧义。
 
-原生数据包路径：`data/graph_assembly/recipe/graph_filter.json` 与 `data/graph_assembly/tags/item/filter_infested_blocks.json`。修改标签即可调整允许的虫蚀原料；两个独立 Ingredient 表示消耗两件，不是一个标签槽消耗一件。不要用通用配方替换函数猜测嵌套的角色与检查点规则。
+原生数据包路径：`data/graph_assembly/recipe/graph_filter.json` 与 `data/graph_assembly/tags/item/filter_infested_blocks.json`。修改标签即可调整允许的虫蚀原料。两个独立 Ingredient 各消耗一件，共两件；只写一个标签材料槽则只消耗一件。修改嵌套角色和检查点规则时应直接编辑图定义，不要依赖通用配方替换函数。
 
 ### 平面连线折点
 

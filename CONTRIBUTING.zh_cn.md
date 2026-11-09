@@ -33,7 +33,7 @@ KubeJS 专项测试示例：
 
 此任务会自动暂存 `src/gametest/kubejs` 脚本；未安装 CreateJS 时会跳过 CreateJS 专属断言。运行客户端使用 `./gradlew.bat runClient`，运行测试客户端使用 `./gradlew.bat runVerificationClient`。
 
-普通 GameTest 与 `-PwithKubejs` 共用 `run/gametest` 配置目录。KubeJS 专项场景若遇到此前暂存的脚本但未启用 KubeJS，该场景不会生效，GameTest 仍可运行。
+普通 GameTest 与 `-PwithKubejs` 共用 `run/gametest` 配置目录。未启用 KubeJS 时，上次运行留下的 KubeJS 脚本不会生效。GameTest 仍可运行，但不包含这些脚本对应的专项场景。
 
 ## 目录
 

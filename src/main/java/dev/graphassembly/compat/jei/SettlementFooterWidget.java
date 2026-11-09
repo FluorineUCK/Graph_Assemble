@@ -1,13 +1,15 @@
 package dev.graphassembly.compat.jei;
 
+import dev.graphassembly.recipe.OperationSpec;
+
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.graphassembly.client.gui.GraphGuiRenderer;
 import dev.graphassembly.client.gui.GraphGuiAssets.Sprite;
 import dev.graphassembly.client.view.NodePresentation.Bounds;
 import dev.graphassembly.client.view.SettlementFooterLayout;
 import dev.graphassembly.client.view.SettlementGroups;
-import dev.graphassembly.core.GraphDefinition;
-import dev.graphassembly.core.FinishMode;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
+import dev.graphassembly.core.settlement.FinishMode;
 import mezz.jei.api.gui.builder.ITooltipBuilder;
 import mezz.jei.api.gui.inputs.IJeiUserInput;
 import mezz.jei.api.gui.inputs.RecipeSlotUnderMouse;
@@ -27,7 +29,7 @@ final class SettlementFooterWidget {
                            SettlementSlots.Entry preview, int candidateCount, Component tooltip) {}
     private record Visible(SettlementSlots.Entry entry, Bounds bounds) {}
     private record Status(Bounds bounds, Component text, String color) {}
-    private final GraphDefinition graph;
+    private final GraphDefinition<OperationSpec> graph;
     private final GraphViewState view;
     private final SettlementGroups groups;
     private final SettlementSlots slots;
@@ -49,7 +51,7 @@ final class SettlementFooterWidget {
     private boolean keyboardCandidates;
     private double lastMouseX = Double.NaN, lastMouseY = Double.NaN;
 
-    SettlementFooterWidget(GraphDefinition graph, GraphViewState view, int width, int footerY) {
+    SettlementFooterWidget(GraphDefinition<OperationSpec> graph, GraphViewState view, int width, int footerY) {
         this.graph = graph; this.view = view;
         groups = SettlementGroups.from(graph);
         if (view.selectedFinish != null && groups.finishes().stream().noneMatch(f -> f.id().equals(view.selectedFinish))) view.overview();

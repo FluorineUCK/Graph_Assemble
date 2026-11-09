@@ -1,9 +1,16 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.codec.ProgressCodec;
+import dev.graphassembly.core.condition.mark.MarkAccounting;
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.progress.Progress;
+import dev.graphassembly.core.progress.TransitionResult;
+import dev.graphassembly.core.route.RouteResolver;
+import dev.graphassembly.core.route.RouteState;
+
 import com.google.gson.JsonParser;
 import com.simibubi.create.content.logistics.filter.FilterItemStack;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.*;
 import dev.graphassembly.filter.*;
 import dev.graphassembly.integration.GraphRuntime;
 import dev.graphassembly.filter.FilterConfiguration.Mode;
@@ -25,8 +32,8 @@ public final class FilterRuleGameTests {
         return new GraphRecipe(JsonParser.parseString("""
             {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
              "nodes":[{"id":"s","start":true,"branch_mode":"%s","recipe":{"type":"create:pressing"}},
-                      {"id":"a","rewards":{"x":1},"recipe":{"type":"create:cutting"}},
-                      {"id":"b","rewards":{"x":1},"recipe":{"type":"create:filling","ingredients":[{"type":"neoforge:single","fluid":"minecraft:water","amount":250}]}}],
+                      {"id":"a","mark_amounts":{"x":1},"recipe":{"type":"create:cutting"}},
+                      {"id":"b","mark_amounts":{"x":1},"recipe":{"type":"create:filling","ingredients":[{"type":"neoforge:single","fluid":"minecraft:water","amount":250}]}}],
              "edges":[{"from":"s","to":"a"},{"from":"s","to":"b"}]}
             """.formatted(random ? "random" : "choice")).getAsJsonObject());
     }
@@ -34,7 +41,7 @@ public final class FilterRuleGameTests {
         return new GraphRecipe(JsonParser.parseString("""
             {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
              "nodes":[{"id":"s","start":true,"branch_mode":"choice","recipe":{"type":"create:pressing"}},
-                      {"id":"a","rewards":{"x":1},"recipe":{"type":"create:cutting"}}],
+                      {"id":"a","mark_amounts":{"x":1},"recipe":{"type":"create:cutting"}}],
              "edges":[{"from":"s","to":"a"}]}
             """).getAsJsonObject());
     }
@@ -59,16 +66,16 @@ public final class FilterRuleGameTests {
             var initialIndex = GraphIndex.get(level);
             check(GraphIndex.get(level) == initialIndex, "Unchanged recipe holders must reuse the current GraphIndex");
             var graph = initialIndex.graphs().get(ID);
-            var initial = GraphEngine.complete(graph, null, "s", "minecraft:iron_ingot", () -> 0).state();
+            var initial = ((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(graph, null, "s", "minecraft:iron_ingot"), () -> 0)).progress();
             var piece = Workpiece.write(new ItemStack(Items.IRON_NUGGET), initial);
             var cached = Workpiece.read(level, piece);
             check(cached == Workpiece.read(level, piece), "Same immutable component must return the same parsed snapshot");
-            var changed = new Progress(ID, "s", "s", Map.of(), List.of("s", "s"), Map.of(), null, List.of("s"));
-            piece.set(GraphAssembly.PROGRESS.get(), changed.toJson().toString());
+            var changed = new Progress(ID, "s", "s", new MarkAccounting.State(Map.of(), Map.of()), List.of("s", "s"), new RouteState(null, null), List.of("s"));
+            piece.set(GraphAssembly.PROGRESS.get(), ProgressCodec.toJson(changed).toString());
             check(Workpiece.read(level, piece).equals(changed), "Component replacement must be visible immediately");
-            piece.set(GraphAssembly.PROGRESS.get(), initial.toJson().toString());
+            piece.set(GraphAssembly.PROGRESS.get(), ProgressCodec.toJson(initial).toString());
             check(Workpiece.read(level, piece) == cached, "Restored equal content may reuse its immutable snapshot");
-            var longState = new Progress(ID, "s", "s", Map.of(), Collections.nCopies(100000, "s"), Map.of(), null, List.of("s"));
+            var longState = new Progress(ID, "s", "s", new MarkAccounting.State(Map.of(), Map.of()), Collections.nCopies(100000, "s"), new RouteState(null, null), List.of("s"));
             var longPiece = Workpiece.write(new ItemStack(Items.IRON_NUGGET), longState);
             var longCached = Workpiece.read(level, longPiece);
             check(longCached.checkpoints().size() == 100000 && longCached == Workpiece.read(level, longPiece), "100000 checkpoints remain complete and fit the snapshot budget");
@@ -93,7 +100,7 @@ public final class FilterRuleGameTests {
             check(reloaded != null && !reloaded.nodes().containsKey("b"), "Same-ID recipe replacement must become current without explicit invalidation; nodes="
                 + (reloaded == null ? "<disabled> " + GraphIndex.get(level).disabledReason(ID) : reloaded.nodes().keySet())
                 + " holders=" + manager.getAllRecipesFor(GraphAssembly.RECIPE_TYPE.get()).stream().map(h -> h.value().definition(h.id().toString()).nodes().keySet()).toList());
-            check(GraphEngine.incompatibility(reloaded, cached) == null && GraphEngine.allowed(reloaded, cached).contains("a"),
+            check(RouteResolver.incompatibility(reloaded, cached) == null && GraphPipeline.allowed(reloaded, cached).contains("a"),
                 "Reloaded graph must retain an actionable domain for the warm workpiece");
             var reloadedProgress = Workpiece.read(level, piece);
             check(reloadedProgress.equals(cached) && reloadedProgress == Workpiece.read(level, piece),
@@ -128,7 +135,7 @@ public final class FilterRuleGameTests {
             var graph = GraphIndex.get(level).graphs().get(ID);
             check(graph != null, "Fixture must be a supported non-conflicting graph");
             var raw = new ItemStack(Items.IRON_INGOT);
-            var state = GraphEngine.complete(graph, null, "s", "minecraft:iron_ingot", () -> 0).state();
+            var state = ((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(graph, null, "s", "minecraft:iron_ingot"), () -> 0)).progress();
             var piece = Workpiece.write(new ItemStack(Items.IRON_NUGGET), state);
             check(matches(level, raw, rule(Mode.ANY, List.of("a"), "a")), "Negative condition should match a valid entry where a is not available");
             check(matches(level, piece, rule(Mode.ALL, List.of("a", "b"))), "ALL matches both choice successors");
@@ -137,7 +144,7 @@ public final class FilterRuleGameTests {
             check(matches(level, piece, rule(Mode.NONE, List.of("a", "b"), "a", "b")), "NONE combines already-inverted conditions like native Create");
             check(matches(level, piece, rule(Mode.ANY, List.of("s"), "s")), "Completed start is no longer a next operation");
             check(!matches(level, new ItemStack(Items.STICK), rule(Mode.ANY, List.of("a"), "a")), "Negation cannot admit unrelated raw items");
-            var other = Workpiece.write(new ItemStack(Items.IRON_NUGGET), new Progress("test:other", "s", "s", Map.of(), List.of("s"), Map.of(), null, List.of("s")));
+            var other = Workpiece.write(new ItemStack(Items.IRON_NUGGET), new Progress("test:other", "s", "s", new MarkAccounting.State(Map.of(), Map.of()), List.of("s"), new RouteState(null, null), List.of("s")));
             check(!matches(level, other, rule(Mode.NONE, List.of("a"))), "Other graph is outside the filter domain");
             var corrupt = piece.copy(); corrupt.set(GraphAssembly.PROGRESS.get(), "broken");
             check(!matches(level, corrupt, rule(Mode.NONE, List.of("s"))), "Malformed progress stays rejected");
@@ -145,9 +152,9 @@ public final class FilterRuleGameTests {
                 check(!matches(level, piece, rule(mode, List.of("gone"), "gone")), "Stale negative target is never a wildcard");
                 check(!matches(level, piece, rule(mode, List.of())), "Empty config must fail closed in all modes");
             }
-            var stopped = Workpiece.write(new ItemStack(Items.IRON_NUGGET), new Progress(ID, "s", "s", Map.of("x", Integer.MAX_VALUE), List.of("s"), Map.of(), null, List.of("s")));
+            var stopped = Workpiece.write(new ItemStack(Items.IRON_NUGGET), new Progress(ID, "s", "s", new MarkAccounting.State(Map.of("x", Integer.MAX_VALUE), Map.of()), List.of("s"), new RouteState(null, null), List.of("s")));
             check(!matches(level, stopped, rule(Mode.ANY, List.of("a"), "a")), "Overflow cannot be bypassed by inversion");
-            var end = Workpiece.write(new ItemStack(Items.IRON_NUGGET), GraphEngine.complete(graph, state, "a", "minecraft:iron_nugget", () -> 0).state());
+            var end = Workpiece.write(new ItemStack(Items.IRON_NUGGET), ((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(graph, state, "a", "minecraft:iron_nugget"), () -> 0)).progress());
             check(!matches(level, end, rule(Mode.NONE, List.of("s"))), "No actionable next step must not pass an exclusion filter");
             check(state.equals(Workpiece.read(piece)), "Matching cannot consume or mutate progress");
 
@@ -166,9 +173,9 @@ public final class FilterRuleGameTests {
 
             manager.replaceRecipes(List.of(new RecipeHolder<>(ResourceLocation.parse(ID), recipe(true)))); GraphIndex.invalidate();
             graph = GraphIndex.get(level).graphs().get(ID);
-            var locked = GraphEngine.complete(graph, null, "s", "minecraft:iron_ingot", () -> 0).state();
+            var locked = ((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(graph, null, "s", "minecraft:iron_ingot"), () -> 0)).progress();
             piece = Workpiece.write(new ItemStack(Items.IRON_NUGGET), locked);
-            check("a".equals(locked.lockedNext()), "Deterministic lock fixture");
+            check("a".equals(locked.routing().lockedNext()), "Deterministic lock fixture");
             check(matches(level, piece, rule(Mode.ALL, List.of("a", "b"), "b")), "Only locked successor is available; not all graph edges");
             check(locked.equals(Workpiece.read(piece)), "Filter never rerolls random target");
             helper.succeed();

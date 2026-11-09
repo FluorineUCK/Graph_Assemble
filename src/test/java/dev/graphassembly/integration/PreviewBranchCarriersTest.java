@@ -1,9 +1,11 @@
 package dev.graphassembly.integration;
 
+import dev.graphassembly.recipe.OperationSpec;
+
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import dev.graphassembly.core.GraphCodec;
-import dev.graphassembly.core.GraphDefinition;
+import dev.graphassembly.codec.GraphCodec;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -24,8 +26,8 @@ class PreviewBranchCarriersTest {
                       {"from":"i1","to":"join"},{"from":"f1","to":"join"}]}
             """).getAsJsonObject();
     }
-    private static GraphDefinition graph(JsonObject json) { return GraphCodec.parse("test:carriers", json); }
-    private static JsonObject view(GraphDefinition graph, String node) {
+    private static GraphDefinition<OperationSpec> graph(JsonObject json) { return GraphCodec.parse("test:carriers", json); }
+    private static JsonObject view(GraphDefinition<OperationSpec> graph, String node) {
         return PreviewRecipeData.forNode(graph, graph.nodes().get(node));
     }
     private static String input(JsonObject view) { return view.getAsJsonArray("ingredients").get(0).getAsJsonObject().get("item").getAsString(); }

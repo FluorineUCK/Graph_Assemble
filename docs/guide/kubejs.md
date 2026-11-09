@@ -2,7 +2,7 @@
 
 English | [简体中文](kubejs.zh_cn.md)
 
-For modpack and recipe authors. This guide covers **Graph Assembly 0.1.1 and Minecraft 1.21.1**. Workpieces and settlement support items only; supported machines may use fluids as native auxiliary resources.
+This guide is for modpack and recipe authors using **Graph Assembly 0.1.2 and Minecraft 1.21.1**. Workpieces and settlement outputs must be items; supported machines can consume fluids as auxiliary ingredients.
 
 Graph Assembly represents each processing operation as a node and each allowed next operation as a directed edge. As a workpiece moves between machines, it carries its current node, marks, and checkpoint history. At an exit, it is settled according to the configured rules.
 
@@ -15,7 +15,7 @@ Graph Assembly represents each processing operation as a node and each allowed n
 5. [Builder API](#5-builder-api)
 6. [Node options](#6-node-options)
 7. [Choice branches](#7-choice-branches)
-8. [Random branches, loops, and reward caps](#8-random-branches-loops-and-reward-caps)
+8. [Random branches, loops, and mark-grant limits](#8-random-branches-loops-and-mark-grant-limits)
 9. [Completion requirements and output settlement](#9-completion-requirements-and-output-settlement)
 10. [Addon execution adapters and full native recipe previews](#10-addon-execution-adapters-and-full-native-recipe-previews)
 11. [Direct JSON, editing, and removal](#11-direct-json-editing-and-removal)
@@ -32,7 +32,7 @@ Graph Assembly represents each processing operation as a node and each allowed n
 | Java | 21 |
 | NeoForge | Development verification baseline 21.1.234 |
 | Create | 6.0.10, development build 6.0.10-281; install its required dependencies as well |
-| Graph Assembly | 0.1.1 |
+| Graph Assembly | 0.1.2 |
 | KubeJS NeoForge | Development verification baseline `2101.7.2-build.379` |
 | Rhino | Corresponding baseline `2101.2.7-build.81` |
 | KubeJS Create (optional) | `2101.3.1-build.18`; provides `event.recipes.create.*`, not required by the basic examples |
@@ -50,7 +50,7 @@ kubejs/
 
 Recipes must be registered inside `ServerEvents.recipes(function (event) { ... })`. Run `/reload` after editing. In multiplayer, the server loads recipe scripts; players do not need to register them again in their own `server_scripts` directory. Install Graph Assembly, Create, and their required dependencies on both client and server. JEI is for client-side display.
 
-Every complete example in this guide uses its own recipe ID. Enable one example at a time, verify it, then combine examples as needed. In particular, do not enable examples that use the same input and the same entry operation at the same time.
+Each complete example has its own recipe ID. Enable one at a time, check the result, then combine them as needed. Examples with the same input and entry operation must not be enabled together.
 
 ## 2. Build your first graph: press, then cut
 
@@ -76,13 +76,13 @@ ServerEvents.recipes(function (event) {
 });
 ```
 
-The resulting process is:
+Processing steps:
 
 1. Feed an iron ingot into a Mechanical Press. The entry node `press` runs and produces an iron nugget workpiece carrying graph progress.
 2. Feed that workpiece into a Mechanical Saw to run `cut`.
 3. `cut` is an exit, and the output rule has no conditions, so settlement produces one gold ingot.
 
-An ordinary iron nugget with no graph progress cannot go directly through the second operation. Note the difference between the workpiece item ID and node IDs: `minecraft:iron_nugget` carries the progress, while `press` and `cut` name the steps in this graph.
+An ordinary iron nugget without graph progress cannot start at the second step. `minecraft:iron_nugget` is the item ID of the progress carrier; `press` and `cut` are node IDs within this graph.
 
 `my_pack:graph/basic` is the recipe ID for the entire graph. Replace it with your preferred namespace and path. Keep recipe IDs and node IDs stable where possible so existing workpieces can continue to work and maintenance stays simpler. ;-)
 
@@ -131,9 +131,11 @@ ServerEvents.recipes(function (event) {
 });
 ```
 
-This uses a complete recipe definition: the input includes the primary item, and the output includes the item representing the primary workpiece. During processing, existing graph rules replace the primary item position; auxiliary ingredients, byproducts, fluids, and native parameters are retained. Final outputs are still determined by graph settlement. The step is snapshotted and is not registered as a standalone recipe; later changes to the upstream builder do not change the embedded node. Set chained parameters before `.node(...)`.
+This is a complete recipe: its inputs include the primary item, and its outputs include the primary workpiece. During processing, graph rules replace that item position while keeping auxiliary ingredients, byproducts, fluids, and native parameters. Graph settlement still determines the final outputs.
 
-Use `.nativeNode(id, json, options)` for full native JSON and mark it with `recipe_mode: 'native'`. This mode uses the full definition and does not add a primary input; Create logical item input 0 is still replaced by the current workpiece. An omitted mode or `'step'` uses the shorthand convention; shorthand raw JSON is only valid for `step`. Continue to reference existing ordinary recipes with `{ type, recipe_id }`; do not pass objects obtained from `event.forEachRecipe` into a node.
+Embedding the node saves a recipe snapshot without registering a standalone recipe. Later changes to the upstream builder do not affect the node, so set chained parameters before `.node(...)`.
+
+Use `.nativeNode(id, json, options)` for full native JSON; it sets `recipe_mode: 'native'` automatically. This mode uses the complete definition without inserting a primary input. Create logical item input 0 is still replaced by the current workpiece. Omitting the mode or using `'step'` selects shorthand mode; raw JSON shorthand is valid only for `step`. Reference existing ordinary recipes with `{ type, recipe_id }`; do not pass objects from `event.forEachRecipe` into a node.
 
 Native parameters such as `.processingTime()`, `.heated()`, `.superheated()`, `.keepHeldItem()`, `.xp()`, and `.cookingTime()` can be reused. Ordinary `shaped` / `shapeless` recipes are converted to vanilla crafting. Special behaviors such as `keepIngredient`, `damageIngredient`, `modifyResult`, `noMirror`, and `noShrink` are not supported in this release and produce an explicit error. `CreateItem.of(..., chance)` is for native operation byproducts, not graph settlement shorthand.
 
@@ -166,7 +168,7 @@ ServerEvents.recipes(function (event) {
             type: 'create:deploying',
             ingredients: [{ item: 'minecraft:iron_nugget' }],
             keep_held_item: false
-        }, { rewards: { precision: 1 } })
+        }, { mark_amounts: { precision: 1 } })
         .node('wash', {
             type: 'create:filling',
             ingredients: [{
@@ -179,7 +181,7 @@ ServerEvents.recipes(function (event) {
             type: 'create:cutting',
             processing_time: 40,
             results: [{ id: 'minecraft:flint', count: 1, chance: 0.25 }]
-        }, { rewards: { precision: 1 } })
+        }, { mark_amounts: { precision: 1 } })
         .node('mill', {
             type: 'create:milling',
             processing_time: 100
@@ -216,16 +218,21 @@ The following are Create processing types. The counts **exclude the automaticall
 | `create:milling` | Millstone | 0 | 0 | 3 |
 | `create:mixing` | Mechanical Mixer and Basin | Up to 63 | Up to 2 | 3 |
 | `create:compacting` | Basin compacting | Up to 63 | Up to 2 | 3 |
+| `create:crushing` | Crushing Wheels | 0 | 0 | 6 |
+| `create:sandpaper_polishing` | Handheld sandpaper / sandpaper Deployer | 0 | 0 | 0 |
+| `create:splashing` | Washing airflow | 0 | 0 | 11 |
+| `create:haunting` | Haunting airflow | 0 | 0 | 11 |
+| `create:emptying` | Item Drain | 0 | 0 | 0 (plus one fluid output) |
 
 - The Deployer supports `keep_held_item`; `true` keeps the held auxiliary item. Tool behavior otherwise follows Create.
-- Milling requires `processing_time` greater than 0.
-- Filling cannot have byproducts. The current execution adapter does not accept fluid primary workpieces, fluid settlement outputs, or native fluid outputs.
+- Milling requires `processing_time` greater than 0; crushing keeps native timing and accepts omitted or zero duration. Crushing Wheels also accept milling steps; oversized batches process only the portion that fits and deliver untouched excess input without dropping workpieces.
+- Filling cannot have byproducts. Only the Item Drain accepts native fluid output; fluid workpieces and graph settlement remain unsupported. Sandpaper and draining settlement must fit one item stack. An incompatible or full drain tank consumes nothing and makes no random draw.
 - Mixing / basin compacting support at most **64 native item inputs (including the primary item, so at most 63 auxiliary Item Ingredients)**, **4 item outputs (including the primary output, so at most 3 byproducts)**, and 2 auxiliary fluid inputs. These are recipe capacities, not 64 physical Basin inventory slots; actual matching is also limited by inventory and output space.
 - Basin inline `ingredients` may mix items and fluids. Preserve native `heat_requirement`, such as `'heated'` or `'superheated'`. When heat is required, the corresponding heat source must actually be present; graph recipes do not bypass this requirement.
 - A recipe that exceeds machine capacity disables execution of the entire graph; excess ingredients are not silently ignored.
 - Machines check output space. Large Mechanical Saw jobs may wait if the worst-case output exceeds capacity; split the input upstream.
 
-Addon recipes using one of the supported native types in this section are validated by the same rules. Custom processing types do not enable graph execution. Create acceptance of standard vanilla recipes by substitute machines is listed below. An in-graph preview of an arbitrary native recipe **does not itself mean the recipe is executable**.
+Addon recipes using the native types listed in this section follow the same validation rules. Custom processing types need their own execution adapter; a graph preview alone does not make them executable. The table below lists Create replacements for standard vanilla recipe nodes.
 
 ### Create substitute machines
 
@@ -270,7 +277,7 @@ For example, this node fragment requires the previous-step workpiece and a stick
 Here A is primary role 0 and B is auxiliary role 1; the empty cell between them is not numbered. A three-cell-wide pattern fits only in a crafting table, not the 2×2 inventory grid.
 
 
-Right-click takes one batch: the first stack goes to the cursor and the rest to inventory; Shift crafts repeatedly. Returned items go back to their original slots first, then to inventory; if there is not enough room, inputs remain. Number-key / offhand swaps require an empty target slot. The graph preview does not support middle-click copying or dropping directly with Q.
+Left- or right-click takes one batch: the first stack goes to the cursor and the rest to inventory. Shift crafts repeatedly. Returned items go back to their original slots first, then to inventory; if there is not enough room, inputs remain. Number-key / offhand swaps require an empty target slot. The graph preview does not support middle-click copying or dropping directly with Q.
 
 Special graph steps for dyeing and repair are described below; other special crafting recipes and third-party menus are not connected.
 
@@ -282,7 +289,7 @@ Each redstone rising edge processes one batch; disabled slots follow vanilla beh
 
 ### Vanilla dyeing and repair
 
-The inventory, crafting table, and vanilla Crafter support the exact native `ArmorDyeRecipe` (`minecraft:crafting_special_armordye`) and `RepairItemRecipe` (`minecraft:crafting_special_repairitem`). Native matching and results are retained; no new format version is introduced.
+The inventory, crafting table, and vanilla Crafter support the exact native `ArmorDyeRecipe` (`minecraft:crafting_special_armordye`) and `RepairItemRecipe` (`minecraft:crafting_special_repairitem`). Native matching and results are retained; the recipe definitions stay unchanged.
 
 For dyeing, the item being dyed is the sole primary workpiece (logical input 0); each non-empty dye slot is numbered as an auxiliary input 1, 2, ... from left to right and top to bottom. For repair, the first non-empty item is the primary workpiece and the second is the auxiliary workpiece. Each is validated separately, and only primary progress is inherited. Native repair removes the name and ordinary enchantments; curses and durability follow the native result.
 
@@ -320,7 +327,9 @@ Brewing nodes use `graph_assembly:brewing`; potion effects are determined by nat
 })
 ```
 
-Each bottle advances and draws its own next step / settlement output; only one shared ingredient is consumed. In ingredient-primary mode, all bottles start from the same ingredient progress and then proceed independently. In bottle-primary mode, each bottle keeps its own history. Bottles and ingredients carrying progress must each have a count of one. If the auxiliary input also carries progress, declare `workpiece_inputs: [{ item_input: 1 }]`; both inputs are validated separately, and only primary progress is inherited.
+Each bottle advances independently and makes its own next-step or settlement draw; the shared ingredient is consumed only once. With the ingredient as primary, all bottles start from the same progress and then proceed independently. With bottles as primary, each keeps its own history.
+
+Each bottle and any progress-bearing ingredient must have a count of one. If the auxiliary input also carries progress, declare `workpiece_inputs: [{ item_input: 1 }]`. Both inputs are checked separately, and the result inherits only primary progress.
 
 If any progress-bearing input fails role, route, or native brewing validation, the entire batch does not process. In ingredient-primary mode, ordinary bottles not claimed by the graph remain unchanged. With a bottle primary and an ordinary ingredient, compatible ordinary bottles can still brew under native rules.
 
@@ -458,9 +467,29 @@ Standard `minecraft:smithing_trim` recipes can also run as graph steps. Input ro
 
 Other dynamic crafting, unknown recipe subclasses, and addon smithing menus are not enabled by this support.
 
+
+### Additional processing steps without handwritten custom JSON
+
+The complete [additional_create_steps.js](../../examples/kubejs/additional_create_steps.js) example runs crushing → polishing → washing → haunting → emptying on their corresponding machines. These steps also work in native `.sequence(...).step(...)` wrappers.
+
+```js
+// Step-mode recipe fragments: do not repeat the primary item input/output.
+const crushing = {type: 'create:crushing', processing_time: 100};
+const polishing = {type: 'create:sandpaper_polishing'};
+const washing = {type: 'create:splashing'};
+const haunting = {type: 'create:haunting'};
+const emptying = {type: 'create:emptying', results: [{id: 'minecraft:water', amount: 250}]};
+```
+
+For emptying, `{id, amount, components?}` describes a native Create fluid result, not a graph exit pool. Progress stays on the item. Each round consumes one primary item, transfers fluid to the tank, and delivers the item results chosen by the graph or native parent sequence. Before consuming inputs, the machine checks tank capacity, fluid components, and whether the inputs still match the saved snapshot.
+
+Full native emptying recipes and references must keep both item and fluid outputs. When the step completes, the primary item result is replaced with the updated workpiece or settlement output.
+
+Sandpaper keeps its native use duration, durability, and Deployer tool consumption. Washing and haunting keep their native exposure timers and completion locks. Move the workpiece out of the airflow and back in for the next round; leaving it exposed does not repeatedly advance it.
+
 ## 5. Builder API
 
-All methods below except `build()` return the builder and can be chained:
+All authoring methods return the builder; `build()` returns JSON and `register()` returns the registered `KubeRecipe`:
 
 | Method | Parameters and behavior |
 |---|---|
@@ -475,7 +504,7 @@ All methods below except `build()` return the builder and can be chained:
 | `.output(rule)` | Append a graph-level settlement rule; also accepts an item string, ItemStack, or equally weighted candidate array. Can be called multiple times |
 | `.build()` | Validate graph structure and return a JSON copy; it **does not register the recipe** |
 
-Finally, register it with `event.custom(graph.build()).id('namespace:path')`.
+Register directly with `graph.register(event, 'namespace:path')`. The existing `event.custom(graph.build()).id('namespace:path')` flow remains supported.
 
 Notes:
 
@@ -484,7 +513,65 @@ Notes:
 - Do not add the same directed edge between a pair of nodes more than once. Use `.edge('loop', 'loop')` for a self-loop; do not call `bidirectionalEdge` with the same node at both ends.
 - Weights must be finite positive numbers, not 0, negative values, `NaN`, or `Infinity`.
 - `build()` validates graph format and references. Items, native recipe decoding, machine adapters, and conflicts are also checked when the game loads recipes. Passing `build()` does not guarantee that a machine can execute the graph.
-- The builder does not generate `format_version`; it has no extra chain methods such as `formatVersion()`, `chance()`, or `requirements()`. Put conditions in `.output(...)` and node settings in the third argument to `.node(...)`.
+- There is no graph-wide `chance()` method; set weights and probabilities on output entries.
+
+### Fluent registration, conditions, and exit pools
+
+| Method | Behavior |
+|---|---|
+| `.register(event, id)` | Validate, register internally through KubeJS, and return its `KubeRecipe`; requires a namespaced ID |
+| `.finishOutput(nodeId, results[, requirements])` | Mark an existing node as an exit and append one local settlement rule |
+| `.scrap(nodeId, results)` | Append local fallback scrap entries |
+| `.requirements(nodeId, requirements)` | Set requirements for logical primary item input `0`, retaining `current_nodes`, auxiliary input roles, and all other node settings |
+| `.conditionalEdge(from, to, requirements[, weight])` | Add a conditional directed edge (default weight `1`) |
+| `.branchMode(nodeId, mode)` | Set `choice` or `random` branching on an existing node |
+| `.progressAction(nodeId, action)` | Append a standard `progress_actions` entry |
+
+Add a node before configuring it by ID. Finish and scrap entries **append** to existing settings. At an exit, matching graph-level and current-node rules contribute to the same output pool; node rules do not override global rules. Scrap is used only when a strict exit has no matching success rule. Lenient exits do not use it.
+
+```js
+ServerEvents.recipes(function (event) {
+    GraphAssembly.create('minecraft:iron_nugget')
+        .ingredient('minecraft:raw_gold')
+        .node('press', {type: 'create:pressing'}, {start: true, mark_amounts: {quality: 1}})
+        .node('finish', {type: 'create:cutting'}, {finish_mode: 'strict'})
+        .requirements('finish', {marks: {quality: 1}})
+        .conditionalEdge('press', 'finish', {marks: {quality: 1}}, 2)
+        .finishOutput('finish', [{item: 'minecraft:diamond', weight: 3}, {item: 'minecraft:emerald', weight: 1}])
+        .scrap('finish', 'minecraft:flint')
+        .register(event, 'my_pack:fluent_graph');
+});
+```
+
+These methods use the same `requirements` format. Marks default to exact matching; `mode: 'partial'` allows additional marks. Checkpoint, count, and range conditions keep their usual meaning.
+
+Edge requirements inspect the workpiece after the source node completes, including its mark grants, checkpoint, and progress actions. Random branches first filter edge requirements and check target primary-workpiece conditions and mark capacity, then draw from the remaining weighted candidates. With no eligible edge, the workpiece stops without a draw. Conditions are checked again before the target operation; auxiliary ingredients and machine state are not checked before the draw.
+
+`.requirements()` sets primary-input conditions without changing its role or merging auxiliary progress. Multi-workpiece inputs still need explicit `workpiece_inputs`, and the result keeps only the primary workpiece's history.
+
+### Native Create sequences
+
+`GraphAssembly.sequence(transitionalItem)` builds a real `create:sequenced_assembly`, with Create handling the loops. It provides `.ingredient(value)`, `.step(recipe[, options])`, `.loops(positiveInteger)`, `.output(results)`, `.build()`, and `.register(event, id)`.
+
+Each step becomes a `graph_assembly:sequence_step` wrapper; step options accept only `recipe_mode` and `campfire`. The outer Create recipe handles loops, native progress components, and final result selection. A sequence needs at least one step and one result.
+
+```js
+ServerEvents.recipes(function (event) {
+    GraphAssembly.sequence('minecraft:iron_nugget')
+        .ingredient('minecraft:iron_ingot')
+        .step(event.smelting('minecraft:iron_nugget', 'minecraft:iron_ingot').cookingTime(60))
+        .step({type: 'create:pressing'})
+        .loops(2)
+        .output(Item.of('minecraft:iron_pickaxe', 1, {'minecraft:damage': 5}))
+        .register(event, 'my_pack:fluent_sequence');
+});
+```
+
+A newly created `KubeRecipe` is captured as an independent snapshot at `.step()` and marked synthetic, so it is not registered separately. Later changes to the original object cannot affect the step. KubeJS callbacks and ingredient actions are unsupported and produce an error.
+
+ItemStacks and components use the same normalization as graph outputs, but sequence results use Create's native `{id, count, components, chance}` format instead of graph `weight` or group rules. In a native sequence, `chance` is a relative result weight and can exceed `1`. Each `.output()` call appends results.
+
+You can still register with `build()` and `event.custom(...)`. See [the complete fluent example](../../examples/kubejs/fluent_authoring.js).
 
 ## 6. Node options
 
@@ -497,8 +584,8 @@ The third argument to `.node(id, recipe, options)` supports:
 | `finish` | `false`; marks an exit and may be `true` at the same time as `start` |
 | `ingredient` | Entry inherits the graph-level ingredient; a different ingredient can be set per entry. Not used to match a non-entry node |
 | `transitional_item` | First operation defaults to the graph workpiece; later operations keep the current item. An explicit value replaces the workpiece item after a successful operation |
-| `rewards` | `{}`; marks added by a successful operation, such as `{ precision: 1 }` |
-| `reward_limit` | Unlimited when omitted; limits the number of times **this node awards rewards to each workpiece**, not the number of operations. 0 means no reward |
+| `mark_amounts` | `{}`; marks added by a successful operation, such as `{ precision: 1 }` |
+| `max_mark_applications` | Unlimited when omitted; limits the number of times **this node grants marks to each workpiece**, not the number of operations. 0 means no mark grant |
 | `checkpoint` | `false` by default for ordinary nodes; entries and exits always record a checkpoint, even if set to `false` |
 | `branch_mode` | `'choice'`; may also be `'random'`, controlling outgoing edges after this node completes |
 | `finish_mode` | `'lenient'`; may also be `'strict'`, controlling what happens when no settlement rule matches at an exit |
@@ -509,13 +596,15 @@ The third argument to `.node(id, recipe, options)` supports:
 | `position` | Automatic layout; can be `[x, y]`. The plane canvas center is the origin, x increases rightward, y downward |
 | `sphere_position` | Automatic sphere layout; can be a nonzero `[x, y, z]`, normalized to a direction on the sphere |
 
-Mark names are author-defined and do not need prior registration. Rewards and limits must be integers from `0..2147483647`. If accumulated rewards would overflow, the step waits before consuming ingredients; values are not wrapped or truncated.
+Mark names are author-defined and do not need prior registration. Mark increments and grant limits must be integers from `0..2147483647`. If accumulated marks would overflow, the step waits before consuming ingredients; values are not wrapped or truncated.
 
-Layout coordinates affect only the preview, not processing order. Processing must follow a legal route, with each workpiece checked separately: a saved specified route (`pending_route`) takes precedence; without one, follow the random lock, or ordinary outgoing edges if there is no lock. A `progress_actions` route change can override ordinary edges or a random draw, but the target's own input conditions must still be met. If a lenient exit has no matching settlement rule, it retains the workpiece's post-operation progress and follows a specified route first; only without one does it continue along an outgoing edge. It cannot roll back to the pre-operation state. After a successful operation, processing order is rewards → append checkpoint → `progress_actions` → exit settlement → route handling if unsettled.
+`mark_amounts` sets the amount of each mark granted by a successful step. `max_mark_applications` limits how many times that node may grant marks to each workpiece; reaching the limit does not prevent further processing. The saved `mark_grant_counts` map records those per-node counts and is not a node option. Clearing marks does not reset the counts. Granting several marks at once counts as one application. A nonempty map of zero increments still counts as one application; an empty map does not.
+
+Layout coordinates affect only the preview, not processing order. Processing must follow a legal route, with each workpiece checked separately: a saved specified route (`pending_route`) takes precedence; without one, follow the random lock, or ordinary outgoing edges if there is no lock. A `progress_actions` route change can override ordinary edges or a random draw, but the target's own input conditions must still be met. If a lenient exit has no matching settlement rule, it retains the workpiece's post-operation progress and follows a specified route first; only without one does it continue along an outgoing edge. It cannot roll back to the pre-operation state. After a successful operation, processing order is mark grants → append checkpoint → `progress_actions` → exit settlement → route handling if unsettled.
 
 ### Dual-workpiece Basin merge example
 
-Copy the complete script [`examples/kubejs/multi_workpiece.js`](../../examples/kubejs/multi_workpiece.js) by itself into `kubejs/server_scripts/`, then run `/reload`. It uses the existing `.node(..., options)` and `.output(...)` methods; no new Builder methods are needed. This example has been loaded in a real KubeJS environment. Do not enable it together with a graph whose entry conditions overlap.
+Copy the complete [`examples/kubejs/multi_workpiece.js`](../../examples/kubejs/multi_workpiece.js) script by itself into `kubejs/server_scripts/`, then run `/reload`. It uses `.node(..., options)` and `.output(...)` without additional builder methods. The example has been loaded in a running KubeJS environment. Do not enable it alongside a graph with overlapping entry conditions.
 
 Prepare and process two workpieces from the **same graph**:
 
@@ -548,7 +637,7 @@ Here the iron nugget in `ingredients` is the auxiliary Ingredient; the system in
 - `current_nodes` may be omitted to add no “current node must be in this list” restriction. If provided, it must be non-empty, contain no duplicates, and reference nodes in this graph. Even when omitted, the role must follow its specified route / random lock / ordinary outgoing-edge rules.
 - Role `requirements` apply to that input's own marks and complete checkpoint history. An undeclared ordinary auxiliary input must not carry graph progress; a workpiece from another graph or an ineligible workpiece cannot be substituted for an ordinary ingredient.
 - Role 0 may be omitted; the primary workpiece still follows normal traversal rules. If role 0 is explicitly declared, it must be an entered workpiece, not an ordinary entry ingredient.
-- Only the primary workpiece's progress after the operation is carried into the primary output. Auxiliary marks, checkpoints, reward counts, and locks are not merged, and byproducts do not clone graph progress. Retention or consumption still follows the machine's native rules, such as Deployer `keep_held_item`.
+- Only the primary workpiece's progress after the operation is carried into the primary output. Auxiliary marks, checkpoints, mark-grant counts, and locks are not merged, and byproducts do not clone graph progress. Retention or consumption still follows the machine's native rules, such as Deployer `keep_held_item`.
 
 The example's two exit conditions are:
 
@@ -557,7 +646,7 @@ The example's two exit conditions are:
 | `body → join → finish` | `min: 2, max: 2` | `max: 0` | Emerald |
 | `body → polish → join → finish` | `min: 4, max: 4` | `min: 1, max: 1` | Diamond |
 
-The script also uses the existing `checkpoints` `partial` condition to require the ordered primary route. The range conditions and the existing condition must all match; reaching the required quality alone does not bypass the route. See Section 9 for field rules.
+The script uses the `checkpoints` `partial` condition to require the primary route in order. Both the ranges and route condition must match; reaching the required quality alone is not enough. See Section 9 for field rules.
 
 ### Clear progress and redirect after processing
 
@@ -582,13 +671,13 @@ Other actions:
 - `{ type: 'pop_checkpoint' }`: remove the most recent checkpoint record; an empty list remains empty.
 - `{ type: 'enter_edge', from: 'inspect', to: 'finish' }`: select an existing `inspect → finish` edge, making `finish` the next operation. It does not run `inspect` or add its progress.
 
-A node can have at most one `goto_node` or `enter_edge`. After successful processing, rewards are granted and the current checkpoint is appended first; actions then run in list order, followed by settlement. If settlement occurs, no redirect follows. Start and finish nodes record checkpoints automatically, so `pop_checkpoint` on either removes the current operation's record.
+A node can have at most one `goto_node` or `enter_edge`. After successful processing, marks are granted and the current checkpoint is appended first; actions then run in list order, followed by settlement. If settlement occurs, no redirect follows. Start and finish nodes record checkpoints automatically, so `pop_checkpoint` on either removes the current operation's record.
 
-A redirect overrides ordinary outgoing edges and random draws, but does not bypass the target's input conditions. The entry, recent processing history, and reward-award count remain unchanged; ingredients are not refunded. For dual-workpiece recipes, only the primary workpiece is modified. A target's `current_nodes` checks the node that actually just completed, not the selected edge's source. `goto_node` specifies the next operation; it does not skip that target's processing, entry ingredient, or settlement conditions.
+A redirect overrides ordinary outgoing edges and random draws, but does not bypass the target's input conditions. The entry, recent processing history, and mark-grant count remain unchanged; ingredients are not refunded. For dual-workpiece recipes, only the primary workpiece is modified. A target's `current_nodes` checks the node that actually just completed, not the selected edge's source. `goto_node` specifies the next operation; it does not skip that target's processing, entry ingredient, or settlement conditions.
 
 See [progress-actions.json](../../examples/datapack/progress-actions.json) for a complete datapack example. Place it at `data/my_pack/recipe/progress_actions.json` to test it by itself:
 
-1. Elytra membrane pressing → cutting inspection → direct press exit: defect is 3, yielding flint scrap.
+1. Phantom membrane pressing → cutting inspection → direct press exit: defect is 3, yielding flint scrap.
 2. After inspection, mill for rework: defect drops to 1 and old inspection records plus the most recent checkpoint are cleared. Cut for inspection again, then press to obtain a diamond.
 3. After inspection, use a Deployer with redstone to repair: clear defect and enter the `inspect → finish` edge; pressing directly yields a diamond.
 
@@ -630,7 +719,7 @@ Do not connect two operations with indistinguishable conditions to the same `cho
 
 Entries from different graphs also conflict if they accept the same input and auxiliary conditions on the same machine. Use different entry ingredients in released examples, or enable only one of them.
 
-## 8. Random branches, loops, and reward caps
+## 8. Random branches, loops, and mark-grant limits
 
 Random mode is set on the **source node of outgoing edges**. Weights determine the next step, not the probability of the final output.
 
@@ -642,8 +731,8 @@ ServerEvents.recipes(function (event) {
         .node('polish', {
             type: 'create:cutting', processing_time: 40
         }, {
-            rewards: { quality: 1 },
-            reward_limit: 3,
+            mark_amounts: { quality: 1 },
+            max_mark_applications: 3,
             checkpoint: true,
             branch_mode: 'random'
         })
@@ -666,7 +755,7 @@ ServerEvents.recipes(function (event) {
 
 After each `polish` operation, the next step is drawn at 3:1: 75% chance to cut again, 25% chance to go to the pressing exit. The selected target is saved on the workpiece. Viewing it in JEI, using a filter, or reloading recipes does not redraw; send the workpiece to the machine for its locked target.
 
-Rewards are granted at most three times, but the loop can continue afterward. When exit processing completes, `quality >= 3` yields a diamond; otherwise the strict failure yields a dead bush. A loop does not run automatically on a timer: a machine must complete each operation.
+Marks are granted at most three times, but the loop can continue afterward. When exit processing completes, `quality >= 3` yields a diamond; otherwise the strict failure yields a dead bush. A loop does not run automatically on a timer: a machine must complete each operation.
 
 ## 9. Completion requirements and output settlement
 
@@ -681,7 +770,7 @@ Rewards are granted at most three times, but the loop can continue afterward. Wh
 | `requirements` | Optional; matches marks / checkpoints, mark ranges, and checkpoint-count ranges |
 | `results` | Required and non-empty; candidate outputs |
 
-Only a node completed with `finish: true` attempts settlement. The node's rewards are added and its checkpoint is recorded, then `progress_actions` run, and then rules are checked. Conditions can include the current exit and marks newly added by this operation. If an action clears related marks or checkpoints, conditions see the current retained state after the action.
+Only a node completed with `finish: true` attempts settlement. The node's marks are granted and its checkpoint is recorded, then `progress_actions` run, and then rules are checked. Conditions can include the current exit and marks newly added by this operation. If an action clears related marks or checkpoints, conditions see the current retained state after the action.
 
 ### Condition syntax
 
@@ -733,13 +822,13 @@ For example, these conditions require quality from 2 to 4, exactly one `join` ch
 - Ranges **include both endpoints**. Each range must specify at least one of `min` or `max`. An omitted lower bound is 0; an omitted upper bound is `2147483647`. Endpoints must be integers in the allowed range, and the lower bound cannot exceed the upper bound.
 - `quality: { min: 3 }` means at least 3; `quality: { max: 3 }` means 0–3; `{ min: 3, max: 3 }` means exactly 3; `{ max: 0 }` means it must be 0. Missing marks and unrecorded checkpoints count as 0.
 - `checkpoint_counts: { polish: { max: 0 } }` can express a “polishing route forbidden” condition, provided `polish` actually has `checkpoint: true`. Processing an ordinary non-checkpoint node does not create a checkpoint, so counts cannot tell whether it was visited.
-- Counts use the currently retained complete checkpoint sequence (cleared or popped records no longer count), not the last three steps shown in a tooltip and not `reward_limit` award counts. Entries / exits count automatically; repeated visits to checkpoints count repeatedly. Checkpoint keys must reference nodes in the graph.
+- Counts use the currently retained complete checkpoint sequence (cleared or popped records no longer count), not the last three steps shown in a tooltip and not the per-node grant counts in `mark_grant_counts`. Entries / exits count automatically; repeated visits to checkpoints count repeatedly. Checkpoint keys must reference nodes in the graph.
 - The four condition types `marks`, `checkpoints`, `mark_ranges`, and `checkpoint_counts` are combined with **AND**. Ranges constrain only the names they list; they do not change existing exact / partial / unordered semantics and are not affected by the shared `mode`.
 - Omitted conditions are not checked. An empty range map such as `mark_ranges: {}` adds no restriction, but an individual empty range such as `quality: {}` is invalid. This differs from the default exact empty-mark requirement of legacy `marks: {}`.
 
 ### Weighted selection by default; nested groups for simultaneous and independent-probability outputs
 
-The outermost entries in `results` from all matching graph-level rules and current-exit rules are merged into one weighted pool, and one selected entry is executed recursively. Rules are not separate rolls and are not prioritized by order. Existing ordinary item entries keep their behavior; group entries can produce multiple items simultaneously.
+The outermost entries in `results` from all matching graph-level and current-exit rules form one weighted pool. One entry is selected and executed recursively. Rules do not get separate rolls or priority based on their order. Ordinary item entries keep their behavior; groups can produce multiple items at once.
 
 For example, if this is the only matching rule, the result is two gold ingots with 75% probability and one iron ingot with 25% probability:
 
@@ -774,15 +863,15 @@ To always produce A, then independently roll for B and C, put them in one `all` 
 - Item entries allow only `item/count/weight/components/chance`; groups allow only `mode/results/weight/chance`. Misspelled fields report an error with the specific JSON path.
 - Operation `recipe.results` remain native byproducts **independent of settlement**; they are not cancelled when settlement fails or yields no items. Graph settlement entries use `item`, not native `id`.
 
-Copy [nested_probability_outputs.js](../../examples/kubejs/nested_probability_outputs.js) for an example with a fixed diamond, an independent 0–3 emerald roll, a chance-based gold ingot, and an additional `weighted → all → weighted` reward. Its successful rule has no conditions, so its scrap example requires adding a condition to the successful rule before scrap can trigger.
+Copy [nested_probability_outputs.js](../../examples/kubejs/nested_probability_outputs.js) for an example with a fixed diamond, an independent 0–3 emerald roll, a chance-based gold ingot, and an additional `weighted → all → weighted` output. Its successful rule has no conditions, so its scrap example requires adding a condition to the successful rule before scrap can trigger.
 
 **Machine capacity:** The maximum simultaneous output combination is reserved in the Basin, Millstone, and Saw; when space is insufficient, inputs are retained rather than rerolling to avoid a large combination. The Spout uses a single-item-stack API: if the current workpiece could settle to multiple item stacks, the step does not run and consumes neither items nor fluid. Put multi-output exits on a Press, Deployer, Basin, or another machine that supports output lists. Ordinary filling steps and single-stack settlement are unaffected.
 
-**JEI:** Candidate counts are merged for display, such as `0-3`; discrete counts from a group probability remain `0,3`, not a continuous range. A candidate icon represents an output entry, not the total of multiple rewards of the same item. The Info page lists group paths, local weights, and probability semantics; tooltips retain the group association.
+**JEI:** Candidate counts are merged for display, such as `0-3`; discrete counts from a group probability remain `0,3`, not a continuous range. A candidate icon represents an output entry, not the total of multiple outputs of the same item. The Info page lists group paths, local weights, and probability semantics; tooltips retain the group association.
 
 ### When no exit rule matches
 
-- `lenient`: retain the workpiece after this operation, including rewards, checkpoints, and `progress_actions` results. Continue along its saved specified route (`pending_route`) if present; otherwise follow a random lock or exit edge. Wait only if there is neither a specified route nor an outgoing edge. It cannot automatically return to an earlier node. The target must still process successfully and meet its conditions.
+- `lenient`: retain the workpiece after this operation, including marks, checkpoints, and `progress_actions` results. Continue along its saved specified route (`pending_route`) if present; otherwise follow a random lock or exit edge. Wait only if there is neither a specified route nor an outgoing edge. It cannot automatically return to an earlier node. The target must still process successfully and meet its conditions.
 - `strict`: consume the primary workpiece and draw one entry from `scrap`; if no `scrap` is configured, there is no primary output. A lenient exit does not use `scrap`.
 - Operation byproducts are retained independently; settlement failure does not undo them.
 
@@ -796,7 +885,7 @@ The dedicated CCB and Fantasizing execution adapters have been removed; protecti
 
 ### Full native recipe reference: preview and verified execution paths
 
-`recipe_id` references a loaded full native recipe and preserves additional fields through its own CODEC; it does not guess each addon's JSON format. **Only device types with an existing execution adapter can process through this reference.** Recognizing a serializer, `ProcessingRecipe`, or `IAssemblyRecipe` does not automatically grant execution support. Other types remain preview-only.
+`recipe_id` references a loaded native recipe. Its own CODEC reads and preserves the additional fields, without a separate JSON parser for each addon. **Execution still needs an adapter for the machine.** Recognizing a serializer, `ProcessingRecipe`, or `IAssemblyRecipe` does not enable graph processing; other types can only be previewed where a layout is available.
 
 The complete script below references Create's built-in filling recipe and shows sweet berries plus 250 mB of chocolate as inputs:
 
@@ -822,13 +911,15 @@ Reference mode differs from inline mode:
 - Display preserves the native JEI definition. Execution uses a separate native copy: logical item input 0 becomes the primary workpiece, and output 0 is replaced with graph progress/settlement output; all other native ingredients, fluid conditions, and secondary outputs remain. The original recipe is not modified.
 - The graph uses the native JEI layout and ingredient hints. Ingredient slots can query recipes/uses, and native fluid fields retain their types and amounts. There are no addon-specific multiplier parameters.
 - Settlement outputs at the bottom of the graph still come from `.output(...)`; native recipe outputs are not copied automatically.
-- Adapted types can use reference mode, but must still pass device-role, capacity, fluid-output, and other validation. Failure disables the entire graph and reports a reason. This is not an automatic compatibility switch for arbitrary machines.
+- Adapted types must still pass machine-role, capacity, fluid-output, and other checks before a reference can execute. Any failure disables the entire graph and reports the reason. A recipe reference does not replace a machine adapter.
 - Removing a native reference, replacing the recipe under the same ID, or reloading data packs invalidates old graph operations. Use a normal data-pack reload when publishing/changing recipes; directly replacing RecipeManager does not guarantee that third-party private recipe indexes are rebuilt.
 - The reference cannot be created if the target recipe is missing, the serializer does not match, or the required mod is absent. If no matching native JEI layout is available, the node remains unavailable with a hint.
 
 Generic previews read native JEI layouts and do not enable execution based on mod name. If the native layout is absent or fails to create, the node remains unavailable with a hint.
 
-A native machine recipe appearing in a graph preview does not mean the machine has a graph execution adapter. Multi-workpiece merges are limited to explicitly adapted paths and require role declarations; fluids still cannot carry graph progress. Current executable coverage is the seven Create processing types in Section 4; standard inventory/crafting-table and Crafter recipes; the three vanilla furnace processes; campfires; the vanilla stonecutter; standard smithing; dyeing/repairing/trimming; the vanilla anvil and brewing stand. Nodes meeting the corresponding Section 4 requirements can also run on Create replacement machines, including fan-assisted smoking and smelting. See Section 4 for coverage.
+Section 4 lists execution support: twelve Create processing types; standard inventory, crafting-table, and Crafter recipes; the three vanilla furnace processes; campfires; the vanilla stonecutter; standard smithing; dyeing, repair, and trims; and vanilla anvils and brewing stands. Eligible nodes can also run on the corresponding Create replacement machines, including fan smoking and smelting.
+
+Multi-workpiece merges need an adapted processing path and explicit roles. Fluids cannot carry graph progress. A native recipe preview does not mean its machine supports graph execution.
 
 ## 11. Direct JSON, Editing, and Removal
 
@@ -855,12 +946,6 @@ ServerEvents.recipes(function (event) {
 ```
 
 This example uses the same ingredient and pressing entry as Section 2; **enable one or the other, not both**.
-
-### Cleaning up old scripts during development
-
-`format_version` has been removed; setting it to any value, including the former value `2`, causes an error. For scripts using `requirements`, simply remove the top-level field; the builder generates JSON without a version field.
-
-Format 1 also had earlier differences in condition nesting and defaults: move rule-level `marks` / `checkpoints` into `requirements`. If the old recipe omitted `marks` but you still want to require “no marks,” add `requirements: { marks: {} }` explicitly. In the current format, omitting a condition means it is not checked; it does not require an empty value. See [Cleaning up old files during development](../reference/recipe-format.md#cleaning-up-development-era-files) for details. The mod does not automatically convert old recipes or workpieces.
 
 ### Removing an existing graph
 
@@ -892,7 +977,6 @@ For data packs, the 1.21.1 path is `data/<namespace>/recipe/<path>.json`, where 
 |---|---|
 | `GraphAssembly is not defined` | Confirm the mod and matching KubeJS version are installed and the script is server-side; check plugin-loading logs. |
 | `.build()` reports a node or field-path error | Check node uniqueness, edge targets, entry ingredients, and `requirements` nesting. `graph_assembly:script_validation` is the builder's validation name, not the final recipe ID. |
-| `graph.format_version: Remove format_version...` | Remove the old top-level version field. If it came from early format 1, also update condition nesting and defaults as described in Section 11. |
 | Visible in JEI, but the machine does not process it | Check whether it is a preview-only reference or an unsupported device. Use the compatibility command; visibility does not prove executability. |
 | `Deploying requires exactly one auxiliary item ingredient` | In the Deployer's inline `ingredients`, list one auxiliary ingredient only; do not list the primary workpiece. |
 | `Spout requires exactly one fluid ingredient...` | Put exactly one fluid in `ingredients`; do not specify a secondary output. |
@@ -913,7 +997,7 @@ For data packs, the 1.21.1 path is `data/<namespace>/recipe/<path>.json`, where 
 - [ ] Pin and document Minecraft, loader, Create, KubeJS, Rhino, and optional JEI versions.
 - [ ] Include required `server_scripts`; when using custom items, also include `startup_scripts`, names, and texture resources.
 - [ ] Disable demo scripts and duplicate recipes with the same entry; replace example namespaces and outputs.
-- [ ] Remove old `format_version` fields; put all settlement conditions in `requirements`.
+- [ ] Put all settlement conditions in `requirements`.
 - [ ] Check that no production graph is disabled; test each entry, branch, auxiliary ingredient, output capacity, and finish condition.
 - [ ] Test both preparation routes in multi-workpiece graphs, same-graph roles, and rejection of incorrect roles; confirm only primary quality/history is inherited and range endpoints/prohibited-visit conditions behave as intended.
 - [ ] Describe preview-only graphs separately from executable recipes; do not list third-party previews as machine-execution compatibility.
@@ -923,7 +1007,9 @@ For data packs, the 1.21.1 path is `data/<namespace>/recipe/<path>.json`, where 
 
 Copy the [three-path script](../../examples/kubejs/three_path_outputs.js). See the [three-path guide](examples/three-path-outputs.md) for operation steps and independent scrap pools. One Raw Iron entry takes the cutting, Deployer, or filling route and settles at its own strict finish into an Iron Ingot, Gold Ingot, or Diamond; over-processing or insufficient visits go to that finish's scrap pool.
 
-`scrap` belongs to a finish, so this example uses three finishes and adds no conditional-scrap field. Each finish's `outputs` checks ordered paths, mark ranges, and checkpoint counts; graph-level `outputs` stays empty to prevent an unconditional rule bypassing failure. The UI overview shows all successful candidates by default. Selecting a finish shows only that finish's successful candidates and scrap pool; expand long candidate lists with `+N`. Full conditions remain on JEI's native Info page. Entry candidates are not a complete ingredient list; see node details for auxiliary workpieces/fluids and other inputs.
+`scrap` belongs to a finish node, so this example uses three finishes without a conditional-scrap field. Each finish's `outputs` checks the ordered route, mark ranges, and checkpoint counts. Graph-level `outputs` stays empty so an unconditional rule cannot turn a failed route into a successful settlement.
+
+The overview shows all successful candidates. Selecting a finish shows only its successful candidates and scrap pool; use `+N` to expand a long list. Full conditions are on JEI's native Info page. Entry candidates list only entry ingredients; check node details for auxiliary workpieces, fluids, and other inputs.
 
 If the finish list is too long, drag the Create-native scrollbar on the right, click its track, or use the wheel; page through the candidate-item overlay with the buttons or PageUp/PageDown. Resizing the window preserves the selected finish and graph view. Items in the overlay continue to support JEI's native recipe/uses queries.
 
@@ -947,9 +1033,9 @@ Entry ingredients are not intermediate items: `body_start` reads the graph-level
 
 ### Replace with KubeJS; do not register a duplicate
 
-To customize it, copy [filter_crafting.js](../../examples/kubejs/filter_crafting.js) to the instance's `kubejs/server_scripts/`, then run `/reload`. The script removes the built-in recipe by ID and registers the complete graph under the **same** `graph_assembly:graph_filter` ID. It adds the seven infested items to the same-named tag with `ServerEvents.tags('item', ...)`. The mod registers the two dedicated semi-finished items; no extra `startup_scripts` are needed. Do not set `format_version` or rename this graph and enable it alongside the built-in graph, or the shared entry will be ambiguous.
+To customize it, copy [filter_crafting.js](../../examples/kubejs/filter_crafting.js) to the instance's `kubejs/server_scripts/`, then run `/reload`. The script removes the built-in recipe by ID and registers the complete graph under the **same** `graph_assembly:graph_filter` ID. It adds the seven infested items to the same-named tag with `ServerEvents.tags('item', ...)`. The mod registers the two dedicated semi-finished items; no extra `startup_scripts` are needed. Do not rename this graph and enable it alongside the built-in graph, or the shared entry will be ambiguous.
 
-Native data-pack paths: `data/graph_assembly/recipe/graph_filter.json` and `data/graph_assembly/tags/item/filter_infested_blocks.json`. Modify the tag to change which infested ingredients are allowed; two separate Ingredient entries consume two items, rather than one item from one tag slot. Do not use a generic recipe-replacement function to guess at nested role and checkpoint rules.
+Native data-pack paths: `data/graph_assembly/recipe/graph_filter.json` and `data/graph_assembly/tags/item/filter_infested_blocks.json`. Edit the tag to change the allowed infested ingredients. Two separate Ingredient entries each consume one item, for a total of two; a single tag ingredient consumes only one. Edit nested role and checkpoint rules in the graph definition rather than relying on a generic recipe-replacement function.
 
 ### Planar edge waypoints
 

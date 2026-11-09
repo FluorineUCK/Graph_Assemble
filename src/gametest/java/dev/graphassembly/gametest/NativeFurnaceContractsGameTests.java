@@ -236,7 +236,7 @@ public final class NativeFurnaceContractsGameTests {
             check(preview.getIngredients().getFirst().test(new ItemStack(Items.AMETHYST_SHARD))&&preview.getIngredients().getFirst().test(new ItemStack(Items.COPPER_INGOT)),"Inline cooking preview preserves full alternative entrance ingredient");
             check(dev.graphassembly.integration.AssemblyDiscovery.scan(List.of(holder)).stream().anyMatch(o->o.capability().deviceAdapter()),"Discovery includes supported exact native cooking");
             s.install(new RecipeHolder<>(ID,g),holder);
-            check(dev.graphassembly.integration.projection.NativeRecipeCatalog.find(new Object(),helper.getLevel(),r->r.value().getType()==RecipeType.SMELTING).stream().noneMatch(r->r.id().getNamespace().equals(GraphAssembly.ID)&&r.id().getPath().startsWith("projection/")),"Cooking graph never becomes a Create ProcessingRecipe projection");
+            check(dev.graphassembly.integration.bridge.NativeRecipeCatalog.find(new Object(),helper.getLevel(),r->r.value().getType()==RecipeType.SMELTING).stream().noneMatch(r->r.id().getNamespace().equals(GraphAssembly.ID)&&r.id().getPath().startsWith("projection/")),"Cooking graph never becomes a Create ProcessingRecipe projection");
         }helper.succeed();
     }
     @GameTest(template="test_empty",timeoutTicks=100)

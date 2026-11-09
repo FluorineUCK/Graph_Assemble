@@ -1,8 +1,12 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.condition.mark.MarkAccounting;
+import dev.graphassembly.core.progress.Progress;
+import dev.graphassembly.core.route.RouteState;
+
 import com.google.gson.JsonParser;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.integration.brewing.BrewingAccess;
+import dev.graphassembly.integration.vanilla.brewing.BrewingAccess;
 import dev.graphassembly.recipe.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.*;
@@ -136,7 +140,7 @@ public final class NativeBrewingContractsGameTests {
             s.install(graph(false,false,"[{\"item\":\"minecraft:diamond\"}]"));s.fill(1);s.stand.setItem(1,splash.copy());s.tick(401);
             check(Workpiece.has(s.stand.getItem(0))&&!Workpiece.has(s.stand.getItem(1))&&s.stand.getItem(1).get(net.minecraft.core.component.DataComponents.POTION_CONTENTS).is(Potions.AWKWARD),"Bottle primary coexists with ordinary brew");
             s.fill(1);var progress=Workpiece.read(s.stand.getItem(0));
-            var tracked=new dev.graphassembly.core.Progress(ID.toString(),"brew","brew",Map.of(),List.of(),Map.of(),null,List.of("brew"));
+            var tracked=new Progress(ID.toString(), "brew", "brew", new MarkAccounting.State(Map.of(), Map.of()), List.of(), new RouteState(null, null), List.of("brew"));
             s.stand.setItem(4,Workpiece.write(new ItemStack(Items.BLAZE_POWDER),tracked));s.tick(401);
             check(Workpiece.has(s.stand.getItem(4))&&s.stand.getItem(3).getCount()==4,"Tracked fuel never burns, even with existing reserve");
         }helper.succeed();
@@ -176,19 +180,19 @@ public final class NativeBrewingContractsGameTests {
                     "outputs":[{"results":[{"item":"minecraft:diamond"}]}]}
                     """.formatted(ingredient?"nether_wart":"potion",ingredient?"ingredient":"bottle",ingredient?"ingredient":"bottle")).getAsJsonObject();
                 // Route makes seed->brew unambiguous even though seed has a self-edge for different histories.
-                var progress=new dev.graphassembly.core.Progress(ID.toString(),"seed","seed",Map.of(),List.of(),Map.of(),null,List.of("seed"));
+                var progress=new Progress(ID.toString(), "seed", "seed", new MarkAccounting.State(Map.of(), Map.of()), List.of(), new RouteState(null, null), List.of("seed"));
                 data.getAsJsonArray("edges").remove(0);
                 s.install(new GraphRecipe(data));s.fill(3);ItemStack source=ItemStack.EMPTY;
                 if(ingredient){source=Workpiece.write(new ItemStack(Items.NETHER_WART),progress);s.stand.setItem(3,source);}
                 else for(int i=0;i<3;i++){
-                    var state=new dev.graphassembly.core.Progress(ID.toString(),"seed","seed",Map.of("history",i),List.of(),Map.of(),null,List.of("seed"));
+                    var state=new Progress(ID.toString(), "seed", "seed", new MarkAccounting.State(Map.of("history",i), Map.of()), List.of(), new RouteState(null, null), List.of("seed"));
                     s.stand.setItem(i,Workpiece.write(s.stand.getItem(i),state));
                 }
                 var before=source.copy();s.tick(400);var random=helper.getLevel().random;random.setSeed(311);
                 var expected=new ArrayList<String>();for(int i=0;i<3;i++)expected.add(random.nextDouble()<0.5?"a":"b");double next=random.nextDouble();random.setSeed(311);s.tick(1);
                 for(int i=0;i<3;i++){
-                    var state=Workpiece.read(s.stand.getItem(i));check(state!=null&&state.lockedNext().equals(expected.get(i)),"Per-bottle independent next draw");
-                    if(!ingredient)check(state.marks().get("history")==i,"Bottle history is not merged");
+                    var state=Workpiece.read(s.stand.getItem(i));check(state!=null&&state.routing().lockedNext().equals(expected.get(i)),"Per-bottle independent next draw");
+                    if(!ingredient)check(state.marks().values().get("history")==i,"Bottle history is not merged");
                 }
                 check(random.nextDouble()==next,"One next choice per bottle");if(ingredient)check(ItemStack.matches(source,before),"Original material state object is never rewritten");
             }
@@ -246,7 +250,7 @@ public final class NativeBrewingContractsGameTests {
     public static void ordinaryCallbackCannotConsumeNewTrackedMaterial(GameTestHelper helper){
         for(int mode=0;mode<3;mode++)try(var s=new Session(helper)){
             helper.getLevel().getRecipeManager().replaceRecipes(List.of());GraphIndex.invalidate();s.fill(1);s.tick(400);
-            var tracked=Workpiece.write(new ItemStack(Items.NETHER_WART),new dev.graphassembly.core.Progress(ID.toString(),"brew","brew",Map.of(),List.of(),Map.of(),null,List.of("brew")));
+            var tracked=Workpiece.write(new ItemStack(Items.NETHER_WART),new Progress(ID.toString(), "brew", "brew", new MarkAccounting.State(Map.of(), Map.of()), List.of(), new RouteState(null, null), List.of("brew")));
             Runnable replace=()->s.stand.setItem(3,tracked.copy());final int action=mode;
             Consumer<PotionBrewEvent.Pre> pre=e->{if(action==1)replace.run();if(action==2)BrewingCallbackFixture.output=replace;};
             if(mode==0)BrewingCallbackFixture.ingredient=replace;NeoForge.EVENT_BUS.addListener(pre);
@@ -294,7 +298,7 @@ public final class NativeBrewingContractsGameTests {
         for(boolean mutate:List.of(false,true))try(var s=new Session(helper)){
             helper.getLevel().getRecipeManager().replaceRecipes(List.of());GraphIndex.invalidate();s.fill(1);
             s.stand.setItem(0,PotionContents.createItemStack(Items.SPLASH_POTION,Potions.WATER));s.stand.setItem(3,new ItemStack(Items.DRAGON_BREATH,2));s.tick(400);
-            int[] calls={0,0};var tracked=Workpiece.write(new ItemStack(Items.DRAGON_BREATH),new dev.graphassembly.core.Progress(ID.toString(),"brew","brew",Map.of(),List.of(),Map.of(),null,List.of("brew")));
+            int[] calls={0,0};var tracked=Workpiece.write(new ItemStack(Items.DRAGON_BREATH),new Progress(ID.toString(), "brew", "brew", new MarkAccounting.State(Map.of(), Map.of()), List.of(), new RouteState(null, null), List.of("brew")));
             Consumer<PotionBrewEvent.Pre> pre=e->{calls[0]++;if(mutate)s.stand.setItem(3,tracked.copy());};
             Consumer<PotionBrewEvent.Post> post=e->calls[1]++;NeoForge.EVENT_BUS.addListener(pre);NeoForge.EVENT_BUS.addListener(post);
             try{s.tick(1);}finally{NeoForge.EVENT_BUS.unregister(pre);NeoForge.EVENT_BUS.unregister(post);}

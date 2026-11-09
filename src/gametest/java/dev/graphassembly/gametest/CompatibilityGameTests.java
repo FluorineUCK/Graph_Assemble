@@ -1,12 +1,15 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.progress.TransitionResult;
+import dev.graphassembly.core.route.RouteResolver;
+
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import com.simibubi.create.api.registry.CreateBuiltInRegistries;
 import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
 import com.simibubi.create.content.kinetics.fan.processing.FanProcessing;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.GraphEngine;
 import dev.graphassembly.integration.AssemblyDiscovery;
 import dev.graphassembly.integration.NativeSteps;
 import dev.graphassembly.recipe.GraphIndex;
@@ -145,10 +148,10 @@ public final class CompatibilityGameTests {
                 check(type != null, "Missing actual fan type " + c.type);
                 var graph = GraphIndex.get(level).graphs().get("graph_assembly:compatibility_fan/" + c.name);
                 check(graph != null, "Workpiece fixture graph must be valid");
-                var state = GraphEngine.complete(graph, null, "s", c.input, () -> 0).state();
+                var state = ((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(graph, null, "s", c.input), () -> 0)).progress();
                 var input = NativeSteps.stack(c.input);
                 var workpiece = Workpiece.write(input, state);
-                check(GraphEngine.incompatibility(graph, Workpiece.read(workpiece)) == null, "Invalid progress fixture");
+                check(RouteResolver.incompatibility(graph, Workpiece.read(workpiece)) == null, "Invalid progress fixture");
                 var expected = BuiltInRegistries.ITEM.get(ResourceLocation.parse(c.output));
                 for (boolean marked : List.of(false, true)) {
                     var stack = marked ? workpiece : input;

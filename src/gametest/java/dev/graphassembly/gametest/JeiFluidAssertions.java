@@ -2,7 +2,7 @@ package dev.graphassembly.gametest;
 
 import com.google.gson.JsonParser;
 import dev.graphassembly.compat.jei.GraphRecipeIngredients;
-import dev.graphassembly.core.GraphCodec;
+import dev.graphassembly.codec.GraphCodec;
 import dev.graphassembly.integration.NativeSteps;
 import com.simibubi.create.content.processing.recipe.ProcessingRecipe;
 import mezz.jei.api.constants.VanillaTypes;
@@ -56,7 +56,7 @@ final class JeiFluidAssertions {
             {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
              "nodes":[{"id":"s","start":true,"recipe":%s}],"edges":[]}
             """.formatted(processing)).getAsJsonObject());
-        return NativeSteps.create(helper.getLevel(), graph, graph.nodes().get("s"), NativeSteps.stack(graph.transitionalItem()));
+        return NativeSteps.create(helper.getLevel(), graph, graph.nodes().get("s"), NativeSteps.stack(graph.defaults().transitionalItem()));
     }
 
     private static void assertFluids(GameTestHelper helper, String fluid) {

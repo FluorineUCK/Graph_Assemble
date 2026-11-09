@@ -48,7 +48,7 @@ class MixinLayeringTest {
                 if (targetName == null) {
                     targetName = resolveTargetImport(source, target.group(2));
                 }
-                String layer = targetName.startsWith("net.minecraft.") ? "common."
+                String layer = targetName.startsWith("net.minecraft.") ? "vanilla."
                         : targetName.startsWith("com.simibubi.create.") ? "create."
                         : targetName.startsWith("mezz.jei.") ? "jei." : null;
                 assertNotNull(layer, "Unknown target dependency: " + targetName);
@@ -85,27 +85,29 @@ class MixinLayeringTest {
         assertFalse(main.has("plugin"));
         assertEquals(Set.of("jei.JeiRecipeLayoutResizeMixin"), entries(main, "client"));
         assertTrue(entries(main, "server").isEmpty());
-        assertEquals(39, entries(main, "mixins").size());
-        assertTrue(entries(main, "mixins").contains("common.BrewingStandMixin"));
+        assertTrue(entries(main, "mixins").containsAll(Set.of("create.SandpaperMixin",
+            "create.CrushingWheelControllerMixin", "create.ItemDrainMixin", "create.GenericItemEmptyingMixin")));
+        assertTrue(entries(main, "mixins").contains("create.sequence.SequenceAccess"));
+        assertTrue(entries(main, "mixins").contains("vanilla.BrewingStandMixin"));
         assertTrue(entries(main, "mixins").contains("create.MechanicalCrafterGraphMixin"));
         assertTrue(entries(main, "mixins").contains("create.GroupedItemsAccess"));
         assertTrue(entries(main, "mixins").contains("create.TransportedItemStackFanStateMixin"));
-        assertTrue(entries(main, "mixins").contains("common.ItemEntityFanStateMixin"));
-        assertTrue(entries(main, "mixins").contains("common.CampfireGraphMixin"));
-        assertTrue(entries(main, "mixins").contains("common.CrafterBlockMixin"));
-        assertTrue(entries(main, "mixins").contains("common.CrafterMenuMixin"));
-        assertTrue(Files.readString(JAVA.resolve("dev/graphassembly/mixin/common/CrafterBlockMixin.java")).contains("@Mixin(CrafterBlock.class)"));
-        assertTrue(Files.readString(JAVA.resolve("dev/graphassembly/mixin/common/CrafterMenuMixin.java")).contains("@Mixin(CrafterMenu.class)"));
-        assertTrue(entries(main, "mixins").contains("common.AbstractFurnaceGraphMixin"));
-        assertTrue(entries(main, "mixins").contains("common.StonecutterMenuMixin"));
-        assertTrue(entries(main, "mixins").contains("common.StonecutterResultSlotMixin"));
-        assertTrue(Files.readString(JAVA.resolve("dev/graphassembly/mixin/common/StonecutterMenuMixin.java")).contains("@Mixin(StonecutterMenu.class)"));
-        assertTrue(Files.readString(JAVA.resolve("dev/graphassembly/mixin/common/StonecutterResultSlotMixin.java")).contains("@Mixin(targets=\"net.minecraft.world.inventory.StonecutterMenu$2\")"));
-        assertTrue(entries(main, "mixins").stream().noneMatch(s -> s.startsWith("jei.") || s.startsWith("common.client.")));
+        assertTrue(entries(main, "mixins").contains("vanilla.ItemEntityFanStateMixin"));
+        assertTrue(entries(main, "mixins").contains("vanilla.CampfireGraphMixin"));
+        assertTrue(entries(main, "mixins").contains("vanilla.CrafterBlockMixin"));
+        assertTrue(entries(main, "mixins").contains("vanilla.CrafterMenuMixin"));
+        assertTrue(Files.readString(JAVA.resolve("dev/graphassembly/mixin/vanilla/CrafterBlockMixin.java")).contains("@Mixin(CrafterBlock.class)"));
+        assertTrue(Files.readString(JAVA.resolve("dev/graphassembly/mixin/vanilla/CrafterMenuMixin.java")).contains("@Mixin(CrafterMenu.class)"));
+        assertTrue(entries(main, "mixins").contains("vanilla.AbstractFurnaceGraphMixin"));
+        assertTrue(entries(main, "mixins").contains("vanilla.StonecutterMenuMixin"));
+        assertTrue(entries(main, "mixins").contains("vanilla.StonecutterResultSlotMixin"));
+        assertTrue(Files.readString(JAVA.resolve("dev/graphassembly/mixin/vanilla/StonecutterMenuMixin.java")).contains("@Mixin(StonecutterMenu.class)"));
+        assertTrue(Files.readString(JAVA.resolve("dev/graphassembly/mixin/vanilla/StonecutterResultSlotMixin.java")).contains("@Mixin(targets=\"net.minecraft.world.inventory.StonecutterMenu$2\")"));
+        assertTrue(entries(main, "mixins").stream().noneMatch(s -> s.startsWith("jei.") || s.startsWith("vanilla.client.")));
         assertTrue(Files.readString(JAVA.resolve("dev/graphassembly/mixin/jei/JeiRecipeLayoutResizeMixin.java")).contains("@Pseudo"));
         var optional = config(OPTIONAL);
         assertEquals("dev.graphassembly.mixin.jei.JeiObservationMixinPlugin", optional.get("plugin").getAsString());
-        assertEquals(Set.of("jei.RecipeSlotObservationMixin", "jei.NativeTooltipObservationMixin", "common.client.GuiScissorObservationMixin"), entries(optional, "client"));
+        assertEquals(Set.of("jei.RecipeSlotObservationMixin", "jei.NativeTooltipObservationMixin", "vanilla.client.GuiScissorObservationMixin"), entries(optional, "client"));
         assertTrue(entries(optional, "mixins").isEmpty());
         assertTrue(entries(optional, "server").isEmpty());
         String plugin = Files.readString(JAVA.resolve(optional.get("plugin").getAsString().replace('.', '/') + ".java"));

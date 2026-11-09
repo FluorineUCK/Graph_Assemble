@@ -1,11 +1,17 @@
 package dev.graphassembly.integration;
 
+import dev.graphassembly.recipe.OperationSpec;
+
+import dev.graphassembly.core.definition.basic.GraphDefinition;
+import dev.graphassembly.core.definition.basic.NodeDefinition;
+import dev.graphassembly.core.io.WeightedOutput;
+import dev.graphassembly.core.io.OutputItem;
+
 import com.google.gson.*;
 import com.mojang.serialization.JsonOps;
 import com.simibubi.create.content.processing.recipe.ProcessingRecipe;
-import dev.graphassembly.core.*;
-import dev.graphassembly.integration.brewing.BrewingDefinition;
-import dev.graphassembly.integration.brewing.BrewingRecipe;
+import dev.graphassembly.integration.vanilla.brewing.BrewingDefinition;
+import dev.graphassembly.integration.vanilla.brewing.BrewingRecipe;
 import dev.graphassembly.diagnostics.PerformanceMetrics;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -17,40 +23,58 @@ import java.util.Set;
 
 /** Serializer admission allow-list, not RecipeType routing: discovery alone never grants execution support. */
 public final class NativeSteps {
-    /** Existing Create processing-device serializers only; native menus have a separately verified family. */
-    public static final Set<String> EXECUTION_SERIALIZERS = Set.of("create:pressing", "create:cutting", "create:deploying", "create:filling", "create:milling", "create:mixing", "create:compacting");
-    private NativeSteps() {}
+    /** Decoding a codec, executing on a device and publishing a candidate are separate permissions. */
+    public enum Route { DEVICE, CANDIDATE, UNSUPPORTED }
+    public enum Adapter {
+        CREATE(Set.of("create:pressing", "create:cutting", "create:deploying", "create:filling", "create:milling", "create:crushing", "create:emptying", "create:mixing", "create:compacting", "create:splashing", "create:haunting", "create:sandpaper_polishing"), Route.DEVICE),
+        ANVIL(Set.of("graph_assembly:anvil"), Route.DEVICE),
+        BREWING(Set.of(BrewingDefinition.SERIALIZER), Route.DEVICE),
+        STONECUTTING(Set.of("minecraft:stonecutting"), Route.DEVICE),
+        SMITHING(Set.of("minecraft:smithing_transform", "minecraft:smithing_trim"), Route.DEVICE),
+        COOKING(dev.graphassembly.integration.vanilla.furnace.CookingDefinition.SERIALIZERS, Route.DEVICE),
+        SPECIAL_CRAFTING(dev.graphassembly.integration.vanilla.crafting.SpecialCraftingDefinition.SERIALIZERS, Route.DEVICE),
+        CRAFTING(dev.graphassembly.integration.vanilla.crafting.CraftingDefinition.SERIALIZERS, Route.DEVICE),
+        UNSUPPORTED(Set.of(), Route.UNSUPPORTED);
 
-    public static boolean supportsExecution(ResourceLocation serializer,Recipe<?> recipe) {
-        if(serializer==null)return false;
-        return recipe.getClass()==dev.graphassembly.integration.anvil.AnvilRecipe.class && serializer.toString().equals("graph_assembly:anvil")
-            || recipe.getClass() == BrewingRecipe.class && serializer.toString().equals(BrewingDefinition.SERIALIZER)
-            || dev.graphassembly.integration.crafting.SpecialCraftingDefinition.standard(recipe)
-                && serializer.equals(BuiltInRegistries.RECIPE_SERIALIZER.getKey(recipe.getSerializer()))
-            || EXECUTION_SERIALIZERS.contains(serializer.toString())
-            || dev.graphassembly.integration.stonecutting.StonecuttingDefinition.standard(recipe) && serializer.toString().equals("minecraft:stonecutting")
-            || dev.graphassembly.integration.smithing.SmithingDefinition.standard(recipe)
-                && (serializer.toString().equals("minecraft:smithing_transform")||serializer.toString().equals("minecraft:smithing_trim"))
-            || dev.graphassembly.integration.furnace.CookingDefinition.standard(recipe) && serializer.equals(BuiltInRegistries.RECIPE_SERIALIZER.getKey(recipe.getSerializer()))
-            || dev.graphassembly.integration.crafting.CraftingDefinition.SERIALIZERS.contains(serializer.toString())
-                && dev.graphassembly.integration.crafting.CraftingDefinition.standard(recipe)
-                && serializer.equals(BuiltInRegistries.RECIPE_SERIALIZER.getKey(recipe.getSerializer()));
+        private final Set<String> serializers;
+        private final Route route;
+        Adapter(Set<String> serializers,Route route){this.serializers=Set.copyOf(serializers);this.route=route;}
+        public Route route(){return route;}
     }
-
+    /** Existing Create processing devices only; retained for preview diagnostics. */
+    public static final Set<String> EXECUTION_SERIALIZERS = Adapter.CREATE.serializers;
+    private NativeSteps() {}
+    public static Adapter adapter(String serializer) {
+        for(var adapter:Adapter.values())if(adapter.serializers.contains(serializer))return adapter;
+        return Adapter.UNSUPPORTED;
+    }
+    public static boolean supportsExecution(ResourceLocation serializer,Recipe<?> recipe) {
+        if(serializer==null||!serializer.equals(BuiltInRegistries.RECIPE_SERIALIZER.getKey(recipe.getSerializer())))return false;
+        return switch(adapter(serializer.toString())) {
+            case CREATE -> recipe instanceof ProcessingRecipe<?,?>;
+            case ANVIL -> recipe.getClass()==dev.graphassembly.integration.vanilla.anvil.AnvilRecipe.class;
+            case BREWING -> recipe.getClass()==BrewingRecipe.class;
+            case STONECUTTING -> dev.graphassembly.integration.vanilla.stonecutting.StonecuttingDefinition.standard(recipe);
+            case SMITHING -> dev.graphassembly.integration.vanilla.smithing.SmithingDefinition.standard(recipe);
+            case COOKING -> dev.graphassembly.integration.vanilla.furnace.CookingDefinition.standard(recipe);
+            case SPECIAL_CRAFTING -> dev.graphassembly.integration.vanilla.crafting.SpecialCraftingDefinition.standard(recipe);
+            case CRAFTING -> dev.graphassembly.integration.vanilla.crafting.CraftingDefinition.standard(recipe);
+            case UNSUPPORTED -> false;
+        };
+    }
     /** Validated template for the specific execution family; never coerces unknown recipe subclasses. */
-    public static Recipe<?> template(Level level, GraphDefinition graph, Node node, ItemStack input) {
-        String serializer=node.recipe().get("type").getAsString();
-        if (serializer.equals(BrewingDefinition.SERIALIZER)) return BrewingDefinition.create(level, node);
-        if(serializer.equals("graph_assembly:anvil"))return dev.graphassembly.integration.anvil.AnvilDefinition.create(level,node);
-        if(serializer.equals("minecraft:stonecutting"))return dev.graphassembly.integration.stonecutting.StonecuttingDefinition.create(level,node,input);
-        if(serializer.equals("minecraft:smithing_transform")||serializer.equals("minecraft:smithing_trim"))return dev.graphassembly.integration.smithing.SmithingDefinition.create(level,node,input);
-        if (dev.graphassembly.integration.furnace.CookingDefinition.SERIALIZERS.contains(serializer))
-            return dev.graphassembly.integration.furnace.CookingDefinition.create(level,node,input);
-        if (dev.graphassembly.integration.crafting.SpecialCraftingDefinition.SERIALIZERS.contains(serializer))
-            return dev.graphassembly.integration.crafting.SpecialCraftingDefinition.original(level,node);
-        if (dev.graphassembly.integration.crafting.CraftingDefinition.SERIALIZERS.contains(serializer))
-            return dev.graphassembly.integration.crafting.CraftingDefinition.create(level,node,input);
-        return create(level,graph,node,input);
+    public static Recipe<?> template(Level level, GraphDefinition<OperationSpec> graph, NodeDefinition<OperationSpec> node, ItemStack input) {
+        return switch(adapter(node.operation().recipe().get("type").getAsString())) {
+            case BREWING -> BrewingDefinition.create(level,node);
+            case ANVIL -> dev.graphassembly.integration.vanilla.anvil.AnvilDefinition.create(level,node);
+            case STONECUTTING -> dev.graphassembly.integration.vanilla.stonecutting.StonecuttingDefinition.create(level,node,input);
+            case SMITHING -> dev.graphassembly.integration.vanilla.smithing.SmithingDefinition.create(level,node,input);
+            case COOKING -> dev.graphassembly.integration.vanilla.furnace.CookingDefinition.create(level,node,input);
+            case SPECIAL_CRAFTING -> dev.graphassembly.integration.vanilla.crafting.SpecialCraftingDefinition.original(level,node);
+            case CRAFTING -> dev.graphassembly.integration.vanilla.crafting.CraftingDefinition.create(level,node,input);
+            // Unknown registered codecs remain discoverable for diagnostics, not executable.
+            case CREATE, UNSUPPORTED -> create(level,graph,node,input);
+        };
     }
 
     public static Ingredient ingredient(Level level, JsonElement json) {
@@ -64,6 +88,9 @@ public final class NativeSteps {
         return stack;
     }
     public static ItemStack output(Level level, WeightedOutput output) {
+        return output(level, new OutputItem(output.item(), output.count(), output.components()));
+    }
+    public static ItemStack output(Level level, OutputItem output) {
         JsonObject json = new JsonObject();
         json.addProperty("id", output.item());
         json.addProperty("count", output.count());
@@ -72,8 +99,8 @@ public final class NativeSteps {
         if (stack.getCount() > stack.getMaxStackSize()) throw new IllegalArgumentException("Result exceeds one full stack: " + output.item());
         return stack;
     }
-    public static ProcessingRecipe<?, ?> create(Level level, GraphDefinition graph, Node node, ItemStack input) {
-        JsonObject json = node.recipe().deepCopy();
+    public static ProcessingRecipe<?, ?> create(Level level, GraphDefinition<OperationSpec> graph, NodeDefinition<OperationSpec> node, ItemStack input) {
+        JsonObject json = node.operation().recipe().deepCopy();
         boolean reference = json.has("recipe_id");
         String type = json.get("type").getAsString();
         ResourceLocation serializer = ResourceLocation.parse(type);
@@ -81,7 +108,7 @@ public final class NativeSteps {
             throw new IllegalArgumentException("Unknown recipe serializer " + type + "; no registered codec or verified device adapter");
         String inputItem = BuiltInRegistries.ITEM.getKey(input.getItem()).toString();
         String outputItem = primaryOutputItem(graph,node,input);
-        if (!node.completeRecipe()) json = PreviewRecipeData.materialize(json, inputItem, outputItem);
+        if (!node.operation().completeRecipe()) json = PreviewRecipeData.materialize(json, inputItem, outputItem);
         Recipe<?> decoded;
         try {
             var ops = level.registryAccess().createSerializationContext(JsonOps.INSTANCE);
@@ -90,16 +117,16 @@ public final class NativeSteps {
         } catch (RuntimeException e) {
             throw new IllegalArgumentException("Registered recipe serializer " + type + " could not decode the supplied step: " + e.getMessage(), e);
         }
-        if (!EXECUTION_SERIALIZERS.contains(type)) throw new IllegalArgumentException(AssemblyDiscovery.inspect(serializer, decoded).diagnostic());
+        if (adapter(type)!=Adapter.CREATE) throw new IllegalArgumentException(AssemblyDiscovery.inspect(serializer, decoded).diagnostic());
         if (!(decoded instanceof ProcessingRecipe<?, ?> recipe)) throw new IllegalArgumentException("Not a Create processing recipe: " + type);
-        if (node.completeRecipe()) {
+        if (node.operation().completeRecipe()) {
             if (recipe.getIngredients().isEmpty() || recipe.getRollableResults().isEmpty())
                 throw new IllegalArgumentException("Complete native recipe needs a primary item input and output");
             // Graph semantics own logical input/result 0; all other native fields remain untouched.
             recipe.getIngredients().set(0, Ingredient.of(input.getItem()));
             recipe.getRollableResults().set(0, new com.simibubi.create.content.processing.recipe.ProcessingOutput(stack(outputItem), 1));
         }
-        for (var role : node.workpieceInputs()) if (role.itemInput() >= recipe.getIngredients().size())
+        for (var role : node.inputs().workpieceInputs()) if (role.itemInput() >= recipe.getIngredients().size())
             throw new IllegalArgumentException("workpiece_inputs.item_input " + role.itemInput() + " exceeds native item input count " + recipe.getIngredients().size());
         if (type.equals("create:deploying") && recipe.getIngredients().size() != 2)
             throw new IllegalArgumentException("Deploying requires exactly one auxiliary item ingredient");
@@ -107,7 +134,12 @@ public final class NativeSteps {
             throw new IllegalArgumentException("Spout requires exactly one fluid ingredient and cannot carry byproducts");
         if (type.equals("create:milling") && recipe.getProcessingDuration() <= 0)
             throw new IllegalArgumentException("Millstone requires processing_time > 0");
-        if (!recipe.getFluidResults().isEmpty()) throw new IllegalArgumentException("Device adapter cannot carry fluid outputs");
+        if (type.equals("create:emptying")) {
+            if (recipe.getIngredients().size()!=1 || !recipe.getFluidIngredients().isEmpty()
+                || recipe.getRollableResults().size()!=1 || recipe.getFluidResults().size()!=1
+                || !DrainOperations.validFluid(level,recipe.getFluidResults().getFirst()))
+                throw new IllegalArgumentException("Item drain requires one primary item and exactly one nonempty fluid output, without auxiliary inputs/byproducts");
+        } else if (!recipe.getFluidResults().isEmpty()) throw new IllegalArgumentException("Device adapter cannot carry fluid outputs");
         for (var output : recipe.getRollableResults()) {
             var stack = output.getStack();
             if (stack.isEmpty() || stack.getCount() > stack.getMaxStackSize()) throw new IllegalArgumentException("Byproduct must be a nonempty, valid-sized stack");
@@ -116,8 +148,8 @@ public final class NativeSteps {
         return recipe;
     }
     /** Shared representative primary result; actual settlement still belongs to graph completion. */
-    public static String primaryOutputItem(GraphDefinition graph,Node node,ItemStack input) {
-        return node.transitionalItem()!=null?node.transitionalItem():dev.graphassembly.recipe.Workpiece.has(input)
-            ?BuiltInRegistries.ITEM.getKey(input.getItem()).toString():graph.transitionalItem();
+    public static String primaryOutputItem(GraphDefinition<OperationSpec> graph,NodeDefinition<OperationSpec> node,ItemStack input) {
+        return node.effects().carrierOverride()!=null?node.effects().carrierOverride():dev.graphassembly.recipe.Workpiece.has(input)
+            ?BuiltInRegistries.ITEM.getKey(input.getItem()).toString():graph.defaults().transitionalItem();
     }
 }

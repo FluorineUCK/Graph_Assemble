@@ -1,7 +1,7 @@
 package dev.graphassembly.compat.jei;
 
 import dev.graphassembly.client.view.SettlementGroups;
-import dev.graphassembly.core.GraphCodec;
+import dev.graphassembly.codec.GraphCodec;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 import java.nio.file.*;

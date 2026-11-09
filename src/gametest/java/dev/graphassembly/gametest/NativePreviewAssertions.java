@@ -4,7 +4,7 @@ import com.google.gson.JsonParser;
 import com.simibubi.create.content.kinetics.deployer.DeployerApplicationRecipe;
 import com.simibubi.create.content.processing.sequenced.IAssemblyRecipe;
 import com.simibubi.create.content.processing.sequenced.SequencedRecipe;
-import dev.graphassembly.core.GraphCodec;
+import dev.graphassembly.codec.GraphCodec;
 import dev.graphassembly.integration.NativeSteps;
 import net.minecraft.gametest.framework.*;
 import net.minecraft.world.item.Items;
@@ -24,7 +24,7 @@ final class NativePreviewAssertions {
                 {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
                  "nodes":[{"id":"s","start":true,"recipe":%s}],"edges":[]}
                 """.formatted(processing[i])).getAsJsonObject());
-            var input = NativeSteps.stack(graph.transitionalItem()); var before = input.copy();
+            var input = NativeSteps.stack(graph.defaults().transitionalItem()); var before = input.copy();
             var recipe = NativeSteps.create(helper.getLevel(), graph, graph.nodes().get("s"), input);
             if (i < 4) check(new SequencedRecipe<>(recipe).getAsAssemblyRecipe().supportsAssembly(), "Expected native sequence step");
             else check(!(recipe instanceof IAssemblyRecipe), "Millstone must not use sequence cast");

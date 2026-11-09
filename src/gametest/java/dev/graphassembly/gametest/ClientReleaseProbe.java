@@ -4,7 +4,7 @@ import com.google.gson.JsonParser;
 import dev.graphassembly.GraphAssembly;
 import dev.graphassembly.compat.jei.GraphJeiPlugin;
 import dev.graphassembly.compat.jei.NativeStepPreview;
-import dev.graphassembly.core.GraphCodec;
+import dev.graphassembly.codec.GraphCodec;
 import dev.graphassembly.integration.NativeSteps;
 import dev.graphassembly.recipe.GraphIndex;
 import mezz.jei.api.IModPlugin;
@@ -34,14 +34,14 @@ public final class ClientReleaseProbe implements IModPlugin {
         if (!Boolean.getBoolean("graph_assembly.clientVerification")) return;
         try {
             var level = java.util.Objects.requireNonNull(Minecraft.getInstance().level, "client level");
-            GraphAssembly.LOGGER.info("RELEASE_PROBE JEI indexed graphs={}", runtime.getRecipeManager().createRecipeLookup(GraphJeiPlugin.TYPE).get().map(g -> g.id()).toList());
+            GraphAssembly.LOGGER.info("RELEASE_PROBE JEI indexed graphs={}", runtime.getRecipeManager().createRecipeLookup(GraphJeiPlugin.TYPE).get().map(g -> g.graph().id()).toList());
             var graph = GraphCodec.parse("test:client_slots", JsonParser.parseString("""
                 {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
                  "nodes":[{"id":"deploy","start":true,"recipe":{"type":"create:deploying","ingredients":[{"item":"minecraft:stick"}],"keep_held_item":true}},
                           {"id":"fill","recipe":{"type":"create:filling","ingredients":[{"type":"neoforge:single","fluid":"minecraft:water","amount":250}]}}],"edges":[]}
                 """).getAsJsonObject());
             for (var node : graph.nodes().values()) {
-                var nativeRecipe = NativeSteps.create(level, graph, node, NativeSteps.stack(graph.transitionalItem()));
+                var nativeRecipe = NativeSteps.create(level, graph, node, NativeSteps.stack(graph.defaults().transitionalItem()));
                 var preview = NativeStepPreview.create(runtime, runtime.getJeiHelpers().getGuiHelper(), nativeRecipe, 0,
                     runtime.getJeiHelpers().getFocusFactory().getEmptyFocusGroup()).orElseThrow();
                 var slots = preview.layout().getRecipeSlotsView().getSlotViews();

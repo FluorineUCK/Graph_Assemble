@@ -1,8 +1,10 @@
 package dev.graphassembly.compat.jei;
 
+import dev.graphassembly.recipe.OperationSpec;
+
 import dev.graphassembly.client.view.SettlementGroups;
 import dev.graphassembly.client.view.SettlementCandidates;
-import dev.graphassembly.core.GraphDefinition;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
 import dev.graphassembly.integration.NativeSteps;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.ingredient.IRecipeSlotDrawable;
@@ -18,11 +20,11 @@ final class SettlementSlots {
     final List<Entry> inputs = new ArrayList<>(), overview = new ArrayList<>();
     final Map<String, List<Entry>> success = new LinkedHashMap<>(), scrap = new LinkedHashMap<>();
     final List<IRecipeSlotDrawable> all = new ArrayList<>();
-    SettlementSlots(GraphDefinition graph, SettlementGroups groups) {
+    SettlementSlots(GraphDefinition<OperationSpec> graph, SettlementGroups groups) {
         var level = Minecraft.getInstance().level;
         if (level == null || GraphJeiPlugin.runtime() == null) return;
-        for (var node : graph.nodes().values()) if (node.start()) {
-            for (var stack : NativeSteps.ingredient(level, node.ingredient() == null ? graph.ingredient() : node.ingredient()).getItems()) {
+        for (var node : graph.nodes().values()) if (node.roles().start()) {
+            for (var stack : NativeSteps.ingredient(level, node.inputs().ingredientOverride() == null ? graph.defaults().ingredient() : node.inputs().ingredientOverride()).getItems()) {
                 var existing = inputs.stream().filter(entry -> ItemStack.isSameItemSameComponents(entry.stack(), stack)
                     && entry.stack().getCount() == stack.getCount()).findFirst();
                 if (existing.isPresent()) existing.get().provenance().add(SettlementInfo.text("footer.start", node.id()));

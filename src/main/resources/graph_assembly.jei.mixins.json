@@ -4,6 +4,6 @@
   "package": "dev.graphassembly.mixin",
   "plugin": "dev.graphassembly.mixin.jei.JeiObservationMixinPlugin",
   "compatibilityLevel": "JAVA_21",
-  "client": ["jei.RecipeSlotObservationMixin", "jei.NativeTooltipObservationMixin", "common.client.GuiScissorObservationMixin"],
+  "client": ["jei.RecipeSlotObservationMixin", "jei.NativeTooltipObservationMixin", "vanilla.client.GuiScissorObservationMixin"],
   "injectors": {"defaultRequire": 1}
 }

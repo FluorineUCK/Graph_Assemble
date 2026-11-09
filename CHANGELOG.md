@@ -2,6 +2,27 @@
 
 English | [简体中文](CHANGELOG.zh_cn.md)
 
+## 0.1.2 — 2026-11-09
+
+### Marks and graph rules
+
+- Unified node mark fields across JSON and KubeJS: `mark_amounts` defines the amounts granted per application, and `max_mark_applications` caps applications at each node. Workpiece state stores per-node application counts in `mark_grant_counts`.
+- Clearing marks does not reset application counts. Granting several marks in one application increments the count once. Unknown node options report their field paths instead of silently changing recipe behavior.
+- Edges can require marks, checkpoints, and their counts, alongside choice branches, random branches, and loops.
+
+### Machines and sequenced assembly
+
+- Added graph execution for crushing wheels, handheld and Deployer sandpaper polishing, fan washing and haunting, and item drains, retaining machine timing, durability, fluid, and capacity checks.
+- Supported operations can run in real `create:sequenced_assembly` recipes through `graph_assembly:sequence_step`. Steps without native animations display the target block at the corresponding position.
+- Consolidated shared machine bridging and grouped vanilla adapters under `vanilla`. Campfire types, configuration, parsing, and checks now belong to the campfire adapter. Existing machine compatibility is retained.
+- Fixed workpiece refunds and duplicate remainders when sandpaper processing is blocked.
+
+### Scripting, documentation, and internals
+
+- KubeJS supports fluent graph registration, separate success and scrap pools for each finish, and native sequenced assembly builders without requiring `event.custom()` for these features.
+- Split core responsibilities into marks, checkpoints, input/output, routing, and settlement, with recipe and workpiece JSON handled by dedicated codecs.
+- Updated both READMEs, KubeJS guides, recipe references, and examples with field semantics, execution coverage, and machine limits.
+
 ## 0.1.1 — 2026-11-04
 
 ### Fixed

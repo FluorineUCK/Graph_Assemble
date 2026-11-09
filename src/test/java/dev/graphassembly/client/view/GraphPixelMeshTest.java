@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import dev.graphassembly.core.Edge;
+import dev.graphassembly.core.definition.basic.Edge;
 import dev.graphassembly.client.view.GraphProjection.Projected;
 import static org.junit.jupiter.api.Assertions.*;
 

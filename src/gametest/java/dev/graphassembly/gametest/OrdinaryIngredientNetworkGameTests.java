@@ -3,7 +3,7 @@ package dev.graphassembly.gametest;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.integration.projection.IngredientDecoration;
+import dev.graphassembly.integration.bridge.IngredientDecoration;
 import io.netty.buffer.Unpooled;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;

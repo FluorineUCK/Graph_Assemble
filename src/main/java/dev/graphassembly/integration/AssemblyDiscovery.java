@@ -35,7 +35,7 @@ public final class AssemblyDiscovery {
         boolean registered = serializer != null && BuiltInRegistries.RECIPE_SERIALIZER.containsKey(serializer);
         return new Capability(serializer == null ? "<unregistered>" : serializer.toString(), String.valueOf(BuiltInRegistries.RECIPE_TYPE.getKey(recipe.getType())),
             recipe.getClass().getName(), registered, assembly, supports,
-            registered && NativeSteps.supportsExecution(serializer,recipe), error);
+            registered && (NativeSteps.supportsExecution(serializer,recipe)||recipe instanceof dev.graphassembly.integration.sequence.SequenceStepRecipe), error);
     }
 
     public static List<Observation> scan(Iterable<RecipeHolder<?>> recipes) {

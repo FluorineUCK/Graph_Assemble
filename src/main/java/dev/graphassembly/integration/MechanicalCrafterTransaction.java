@@ -2,8 +2,7 @@ package dev.graphassembly.integration;
 
 import com.simibubi.create.content.kinetics.crafter.*;
 import com.simibubi.create.infrastructure.config.AllConfigs;
-import dev.graphassembly.integration.crafting.CraftingLookup;
-import dev.graphassembly.integration.furnace.CookingCompletion;
+import dev.graphassembly.integration.vanilla.crafting.CraftingLookup;
 import dev.graphassembly.mixin.create.GroupedItemsAccess;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.SimpleContainer;
@@ -23,7 +22,7 @@ public final class MechanicalCrafterTransaction {
         int graphAssembly$countDown();
     }
     private record Place(Level level,BlockPos pos) {}
-    private static final Map<Place,Scope> ACTIVE=new HashMap<>();
+    private static final MachineScopes<Scope> ACTIVE=new MachineScopes<>(scope->scope.invalid=true);
     private static final ThreadLocal<Deque<Scope>> CALLS=ThreadLocal.withInitial(ArrayDeque::new);
     public static Map<Pair<Integer,Integer>,ItemStack> grid(RecipeGridHandler.GroupedItems items) {
         return ((GroupedItemsAccess)items).graphAssembly$grid();
@@ -54,23 +53,24 @@ public final class MechanicalCrafterTransaction {
     }
     public static final class Scope implements AutoCloseable {
         private final MechanicalCrafterBlockEntity machine;private final Place place;
+        private final MachineScopes<Scope>.Token token;
         private boolean invalid,handled,ready,committed;
         private List<ItemStack> outputs=List.of();
-        private Scope(MechanicalCrafterBlockEntity machine){this.machine=machine;place=new Place(machine.getLevel(),machine.getBlockPos().immutable());}
+        private Scope(MechanicalCrafterBlockEntity machine,MachineScopes<Scope>.Token token){this.machine=machine;this.token=token;place=new Place(machine.getLevel(),machine.getBlockPos().immutable());}
         public boolean prepare() {
             if(invalid){handled=true;return false;}
             try {
                 var level=place.level();var chain=RecipeGridHandler.getAllCraftersOfChain(machine);
                 if(chain==null){handled=true;return false;}
                 var cells=chain.stream().map(Cell::capture).toList();
-                var definitions=new ArrayList<>(level.getRecipeManager().getRecipes());boolean config=AllConfigs.server().recipes.allowRegularCraftingInCrafter.get();
+                var definitions=RecipeSnapshot.capture(level);boolean config=AllConfigs.server().recipes.allowRegularCraftingInCrafter.get();
                 var grouped=((View)machine).graphAssembly$groupedItems();grouped.calcStats();
                 var input=MechanicalCraftingInput.of(grouped);var container=new Grid(input);
                 var lookup=CraftingLookup.find(level,container,(operation,recipe)->CreateNativeRecipes.crafterAdmitted(level,operation,input));
                 if(!current(cells,definitions,config)){handled=true;return false;}
                 handled=lookup.handled();if(!handled)return true;
                 var plan=lookup.plan();if(plan==null||input.items().stream().anyMatch(stack->!stack.isEmpty()&&stack.getCount()!=1))return false;
-                var prepared=CookingCompletion.prepare(level,plan.operation());
+                var prepared=OperationCompletion.prepare(level,plan.operation());
                 var remainders=new ArrayList<ItemStack>();
                 // Preserve native mechanical-crafter per-cell container semantics, exactly once,
                 // but invoke its extension callbacks before the final validation/RNG boundary.
@@ -81,19 +81,16 @@ public final class MechanicalCrafterTransaction {
                 return true;
             } catch(RuntimeException invalidPreparation){handled=true;return false;}
         }
-        private boolean current(List<Cell> cells,List<RecipeHolder<?>> definitions,boolean config) {
+        private boolean current(List<Cell> cells,RecipeSnapshot definitions,boolean config) {
             if(invalid||config!=AllConfigs.server().recipes.allowRegularCraftingInCrafter.get())return false;
             for(var cell:cells)if(!cell.current(place.level()))return false;
-            var now=new ArrayList<>(place.level().getRecipeManager().getRecipes());if(now.size()!=definitions.size())return false;
-            for(int i=0;i<now.size();i++)if(now.get(i)!=definitions.get(i))return false;
-            return true;
+            return definitions.current(place.level());
         }
-        @Override public void close(){ACTIVE.remove(place);var calls=CALLS.get();calls.pop();if(calls.isEmpty())CALLS.remove();}
+        @Override public void close(){token.close();var calls=CALLS.get();calls.removeFirstOccurrence(this);if(calls.isEmpty())CALLS.remove();}
     }
     public static Scope open(MechanicalCrafterBlockEntity machine) {
-        var place=new Place(machine.getLevel(),machine.getBlockPos().immutable());var active=ACTIVE.get(place);
-        if(active!=null){active.invalid=true;return null;}
-        var scope=new Scope(machine);ACTIVE.put(place,scope);CALLS.get().push(scope);return scope;
+        var scope=ACTIVE.enter(machine.getLevel(),machine.getBlockPos(),token->new Scope(machine,token));
+        if(scope!=null)CALLS.get().push(scope);return scope;
     }
     public static Scope current(){return CALLS.get().peek();}
     public static boolean substituting(){var scope=current();return scope!=null&&scope.ready;}

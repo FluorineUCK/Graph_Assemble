@@ -1,9 +1,12 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.condition.mark.MarkAccounting;
+import dev.graphassembly.core.progress.Progress;
+import dev.graphassembly.core.route.RouteState;
+
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.Progress;
 import dev.graphassembly.recipe.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
@@ -192,7 +195,7 @@ public final class NativeCampfireContractsGameTests {
             s.install(s.ordinary("ordinary_save","potato","baked_potato",6));s.machine(Blocks.CAMPFIRE);s.insert(Items.POTATO);s.tick(3);
             var tag=s.fire.saveWithFullMetadata(helper.getLevel().registryAccess());tag.remove("GraphAssemblyCampfireJobs");s.reload(tag);s.tick(3);
             check(s.count(Items.BAKED_POTATO)==1,"Old ordinary save retains elapsed native cookingtime");
-            s.clearDrops();var protectedInput=Workpiece.write(new ItemStack(Items.POTATO),new Progress("test:missing","s","s",Map.of(),List.of(),Map.of(),null,List.of("s")));
+            s.clearDrops();var protectedInput=Workpiece.write(new ItemStack(Items.POTATO),new Progress("test:missing", "s", "s", new MarkAccounting.State(Map.of(), Map.of()), List.of(), new RouteState(null, null), List.of("s")));
             check(s.fire.getCookableRecipe(protectedInput).isEmpty(),"Missing graph progress cannot enter ordinary recipe");
             s.fire.placeFood(null,protectedInput,1);s.tick(3);check(s.drops().isEmpty()&&!s.fire.getItems().getFirst().isEmpty(),"Even direct native insertion cannot cook protected invalid progress as ordinary");
         }

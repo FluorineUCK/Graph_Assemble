@@ -2,7 +2,7 @@
 
 English | [简体中文](compatibility.zh_cn.md)
 
-This page lists the machines, recipe types, and delivery rules available to graph nodes. Addon recipes using a supported native type follow the same rules; addon custom machines require a separate integration. JEI previews reuse native layouts, so their coverage may exceed execution support.
+Graph nodes can use the machines and recipe types listed below, subject to their input and output rules. Addon recipes using a supported native type follow the same rules; custom machines need a separate integration. JEI reuses native layouts and can preview some recipes whose machines cannot execute graph steps.
 
 ## Graph Execution
 
@@ -15,8 +15,15 @@ This page lists the machines, recipe types, and delivery rules available to grap
 | `create:milling` | Millstone; no auxiliary inputs, up to 3 byproducts, and `processing_time > 0` |
 | `create:mixing` | Basin mixing; up to 63 auxiliary items, 2 auxiliary fluids, and 3 byproducts; at most 64 total item inputs and 4 outputs; heat requirements are preserved |
 | `create:compacting` | Basin compacting; up to 63 auxiliary items, 2 auxiliary fluids, and 3 byproducts; at most 64 total item inputs and 4 outputs; heat requirements are preserved |
+| `create:crushing` | Crushing Wheels; no auxiliary inputs, up to 6 byproducts, native `processing_time` (including 0); also accepts milling steps |
+| `create:sandpaper_polishing` | Handheld sandpaper or a Deployer holding sandpaper; no recipe auxiliaries/byproducts; native tool durability is consumed |
+| `create:splashing` | Washing airflow; no auxiliary inputs, up to 11 byproducts; native exposure timers and completion locks remain |
+| `create:haunting` | Haunting airflow; no auxiliary inputs, up to 11 byproducts; native exposure timers and completion locks remain |
+| `create:emptying` | Item Drain; no auxiliary inputs, exactly one nonempty fluid output; item delivery must fit one stack |
 
-The auxiliary-input and byproduct limits in this table exclude one primary input and one primary output. Step mode inserts the primary workpiece automatically; native templates use their existing item input 0/output 0. Both paths use the same native codec and machine validation. The Mechanical Saw reserves space for the worst-case batch output; if capacity is insufficient, it keeps the input and does not process. The Millstone keeps its input until an output slot is available. No execution adapter accepts native fluid outputs. See [Recipe Format](recipe-format.md) and the [KubeJS guide](../guide/kubejs.md) for fields and limits.
+The auxiliary-input and byproduct limits in this table exclude one primary input and one primary output. Step mode inserts the primary workpiece automatically; native templates use their existing item input 0/output 0. Both paths use the same native codec and machine validation.
+
+The Mechanical Saw reserves space for the worst-case batch output; if capacity is insufficient, it keeps the input and does not process. The Millstone keeps its input until an output slot is available. Only the Item Drain accepts native fluid output; fluids never carry graph progress. The drain rechecks tank capacity and fluid identity before consuming inputs; if delivery is blocked, inputs are kept and no random draw is made. Crushing Wheels process the batch portion that fits worst-case output capacity, sending the remaining input unchanged through the native exit without discarding workpieces. See [Recipe Format](recipe-format.md) and the [KubeJS guide](../guide/kubejs.md) for fields and limits.
 
 ### Vanilla Crafting
 
@@ -34,7 +41,7 @@ The exact vanilla `ArmorDyeRecipe` and `RepairItemRecipe` are supported in inven
 
 `graph_assembly:brewing` supports two primary-workpiece modes: each bottle keeps its own progress, or a shared ingredient distributes progress to every eligible bottle. Each bottle advances and settles independently, while the shared ingredient is consumed only once. Progress-bearing auxiliary workpieces must be declared and validated separately.
 
-Actual effects are queried through native `PotionBrewing`; potion components, fuel, duration, events, and ingredient remainder behavior are preserved. Each bottle slot accepts only an empty graph result or one item. The full round is validated before commit. Ordinary brewing keeps its original call path; graph workpieces cannot fall back to ordinary processing.
+Actual effects come from native `PotionBrewing`. Potion components, fuel, duration, events, and ingredient remainders follow native behavior. Each bottle slot accepts an empty graph result or one item, and the whole batch is checked before inputs are consumed. Ordinary brewing uses its original call path; graph workpieces cannot fall back to ordinary processing.
 
 Integration covers only the exact vanilla `BrewingStandBlockEntity` and Brewing Stand block. Rules registered in the native query need no mod-name distinction; this does not enable custom machines, Create fluid processing, or addon Brewing Stand subclasses. See [Brewing Operation](recipe-format.md#brewing-stand-operation) for the format.
 
@@ -115,8 +122,8 @@ This integration excludes special crafting, potion mixing, fan washing/soul-sand
 - Addon recipes using supported native Create types can execute; addon custom processing types do not gain graph execution. Generic JEI previews require access to the native layout, which is not available for every category.
 - The initial release does not include dedicated machine adapters for addons such as CCB and Fantasizing. Their ordinary processing may consume or overwrite workpiece progress.
 
-Administrators can run `/graph_assembly compatibility` to see the discovery report and reasons nodes are disabled. The report lists discovered recipes and adapter status to help locate unsupported nodes.
+Administrators can run `/graph_assembly compatibility` to see discovered recipes, adapter status, and the reasons nodes are disabled.
 
 ### Addons Reading Vanilla Recipes
 
-Reading vanilla recipes does not mean an addon reuses the graph execution entry point. For example, Ratatouille ovens reject workpieces with progress through vanilla queries but cannot discover a smoking step that exists only as a graph node. Vintage Improvements' Mechanical Vibrator decomposition cache turns a progress-bearing iron block into 9 ordinary iron ingots, losing progress. This bypass has not been fixed.
+An addon that reads vanilla recipes does not necessarily use the graph execution path. Ratatouille ovens reject progress-bearing workpieces through vanilla queries but cannot discover a smoking step defined only in a graph. Vintage Improvements' Mechanical Vibrator uses a decomposition cache that turns a progress-bearing iron block into 9 ordinary iron ingots, losing its progress. That bypass remains unfixed.

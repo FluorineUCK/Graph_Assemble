@@ -1,12 +1,16 @@
 package dev.graphassembly.client.view;
 
+import dev.graphassembly.recipe.OperationSpec;
+
+import dev.graphassembly.core.condition.checkpoint.CheckpointRequirement;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import dev.graphassembly.core.CheckpointMode;
-import dev.graphassembly.core.GraphCodec;
-import dev.graphassembly.core.GraphDefinition;
-import dev.graphassembly.core.MarkRequirement;
+import dev.graphassembly.core.condition.checkpoint.CheckpointRequirement.CheckpointMode;
+import dev.graphassembly.codec.GraphCodec;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
+import dev.graphassembly.core.condition.mark.MarkRequirement;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -27,16 +31,16 @@ class SettlementViewModelTest {
                  "checkpoints":{"mode":"unordered","nodes":["s"]}},"results":[{"item":"minecraft:diamond"}]}]}
             """));
         var rules = view.rules();
-        assertNull(rules.get(0).condition().requirements().marks());
-        assertNull(rules.get(0).condition().requirements().checkpoints());
+        assertNull(rules.get(0).condition().requirements().marks().match());
+        assertNull(rules.get(0).condition().requirements().checkpoints().match());
         assertEquals(List.of(MarkRequirement.Mode.EXACT, MarkRequirement.Mode.PARTIAL, MarkRequirement.Mode.EXACT),
-            rules.subList(1, 4).stream().map(rule -> rule.condition().requirements().marks().mode()).toList());
+            rules.subList(1, 4).stream().map(rule -> rule.condition().requirements().marks().match().mode()).toList());
         assertEquals(List.of(CheckpointMode.EXACT, CheckpointMode.SUBSEQUENCE, CheckpointMode.UNORDERED),
-            rules.subList(1, 4).stream().map(rule -> rule.condition().requirements().checkpoints().mode()).toList());
-        assertTrue(rules.get(1).condition().requirements().marks().values().isEmpty());
-        assertTrue(rules.get(1).condition().requirements().checkpoints().nodes().isEmpty());
+            rules.subList(1, 4).stream().map(rule -> rule.condition().requirements().checkpoints().match().mode()).toList());
+        assertTrue(rules.get(1).condition().requirements().marks().match().values().isEmpty());
+        assertTrue(rules.get(1).condition().requirements().checkpoints().match().nodes().isEmpty());
         assertEquals(List.of("s"), rules.get(0).effectiveFinishes(), "Unconditional still has a reachable finish and result");
-        assertEquals("minecraft:diamond", rules.get(0).condition().results().getFirst().item());
+        assertEquals("minecraft:diamond", rules.get(0).condition().leaves().getFirst().item());
     }
     @Test void keepsGraphAndNodeRulesSeparateWithEffectiveFinishTargets() {
         var graph = parse("""
@@ -56,14 +60,14 @@ class SettlementViewModelTest {
         var global = view.rules().get(0);
         assertNull(global.sourceNode());
         assertEquals(List.of("f1", "f2"), global.effectiveFinishes());
-        assertEquals(Map.of(), global.condition().requirements().marks().values(), "Empty marks mean EXACTLY no marks, not unrestricted");
-        assertNull(global.condition().requirements().checkpoints(), "Omitted checkpoints must remain visibly unrestricted");
+        assertEquals(Map.of(), global.condition().requirements().marks().match().values(), "Empty marks mean EXACTLY no marks, not unrestricted");
+        assertNull(global.condition().requirements().checkpoints().match(), "Omitted checkpoints must remain visibly unrestricted");
         var local = view.rules().get(1);
         assertEquals("f1", local.sourceNode());
         assertEquals(List.of("f1"), local.effectiveFinishes());
         assertEquals("s", local.condition().start());
-        assertEquals(Map.of("worked", 2), local.condition().requirements().marks().values());
-        assertEquals(List.of("s", "s", "f1"), local.condition().requirements().checkpoints().nodes());
+        assertEquals(Map.of("worked", 2), local.condition().requirements().marks().match().values());
+        assertEquals(List.of("s", "s", "f1"), local.condition().requirements().checkpoints().match().nodes());
     }
 
     @Test void exposesOnlyReachableStrictFailurePoolsIncludingNoOutputConsumption() {
@@ -104,7 +108,7 @@ class SettlementViewModelTest {
         assertEquals("s", view.rules().get(1).sourceNode());
         assertTrue(view.rules().get(1).effectiveFinishes().isEmpty(), "Outputs on a non-finish node are not reachable");
         assertTrue(view.rules().get(2).effectiveFinishes().isEmpty(), "A local rule cannot match another finish");
-        assertEquals("minecraft:gold_ingot", view.rules().get(2).condition().results().getFirst().item(),
+        assertEquals("minecraft:gold_ingot", view.rules().get(2).condition().leaves().getFirst().item(),
             "An unreachable rule must remain inspectable rather than silently disappearing");
     }
 
@@ -146,19 +150,19 @@ class SettlementViewModelTest {
         assertEquals(3, view.rules().size(), "Three checkpoint modes remain three conditional pools");
         for (int index = 0; index < CheckpointMode.values().length; index++) {
             var rule = view.rules().get(index).condition();
-            assertEquals(CheckpointMode.values()[index], rule.requirements().checkpoints().mode());
-            assertEquals(601, rule.requirements().checkpoints().nodes().size());
-            assertEquals(600, rule.requirements().checkpoints().nodes().stream().filter("s"::equals).count());
-            assertEquals("f", rule.requirements().checkpoints().nodes().getLast());
-            assertEquals(2, rule.results().size());
-            assertEquals(3, rule.results().getFirst().count());
-            assertEquals(2.5, rule.results().getFirst().weight());
-            assertEquals(9.75, rule.results().getLast().weight());
-            assertEquals(longText, rule.results().getFirst().components().getAsJsonObject("minecraft:custom_data").get("memo").getAsString());
+            assertEquals(CheckpointMode.values()[index], rule.requirements().checkpoints().match().mode());
+            assertEquals(601, rule.requirements().checkpoints().match().nodes().size());
+            assertEquals(600, rule.requirements().checkpoints().match().nodes().stream().filter("s"::equals).count());
+            assertEquals("f", rule.requirements().checkpoints().match().nodes().getLast());
+            assertEquals(2, rule.leaves().size());
+            assertEquals(3, rule.leaves().getFirst().count());
+            assertEquals(2.5, rule.leaves().getFirst().weight());
+            assertEquals(9.75, rule.leaves().getLast().weight());
+            assertEquals(longText, rule.leaves().getFirst().components().getAsJsonObject("minecraft:custom_data").get("memo").getAsString());
         }
     }
 
-    private static GraphDefinition parse(String json) {
+    private static GraphDefinition<OperationSpec> parse(String json) {
         return GraphCodec.parse("test:settlement_view", JsonParser.parseString(json).getAsJsonObject());
     }
 }

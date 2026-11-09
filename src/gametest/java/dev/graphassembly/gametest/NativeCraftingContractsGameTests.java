@@ -1,9 +1,11 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.progress.TransitionResult;
+
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.GraphEngine;
 import dev.graphassembly.recipe.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.*;
@@ -211,8 +213,8 @@ public final class NativeCraftingContractsGameTests {
         try(var s=new Session(helper)) {
             var graph=new GraphRecipe(JsonParser.parseString("""
                 {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
-                 "nodes":[{"id":"body","start":true,"rewards":{"quality":3},"recipe":{"type":"create:pressing"}},
-                  {"id":"insert","start":true,"ingredient":{"item":"minecraft:copper_ingot"},"rewards":{"quality":99},"recipe":{"type":"create:cutting"}},
+                 "nodes":[{"id":"body","start":true,"mark_amounts":{"quality":3},"recipe":{"type":"create:pressing"}},
+                  {"id":"insert","start":true,"ingredient":{"item":"minecraft:copper_ingot"},"mark_amounts":{"quality":99},"recipe":{"type":"create:cutting"}},
                   {"id":"join","checkpoint":true,"recipe":{"type":"minecraft:crafting_shapeless","ingredients":[{"item":"minecraft:iron_nugget"},{"item":"minecraft:iron_nugget"}],"result":{"id":"minecraft:iron_nugget"}},
                    "workpiece_inputs":[{"item_input":0,"current_nodes":["body"]},{"item_input":1,"current_nodes":["insert"]}]},
                   {"id":"finish","finish":true,"recipe":{"type":"create:pressing"}}],
@@ -221,12 +223,12 @@ public final class NativeCraftingContractsGameTests {
                 """).getAsJsonObject());
             s.install(graph);
             var definition=graph.definition(ID);
-            var main=Workpiece.write(new ItemStack(Items.IRON_NUGGET),GraphEngine.complete(definition,null,"body","minecraft:iron_ingot",()->0).state());
-            var auxiliary=Workpiece.write(new ItemStack(Items.IRON_NUGGET),GraphEngine.complete(definition,null,"insert","minecraft:copper_ingot",()->0).state());
+            var main=Workpiece.write(new ItemStack(Items.IRON_NUGGET),((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(definition, null, "body", "minecraft:iron_ingot"), ()->0)).progress());
+            var auxiliary=Workpiece.write(new ItemStack(Items.IRON_NUGGET),((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(definition, null, "insert", "minecraft:copper_ingot"), ()->0)).progress());
             for(boolean reverse:List.of(false,true)) {
                 s.reset();s.menu.getSlot(reverse?1:4).set(main.copy());s.menu.getSlot(reverse?4:1).set(auxiliary.copy());s.refresh();s.click(ClickType.PICKUP,0);
                 var progress=Workpiece.read(helper.getLevel(),s.menu.getCarried());
-                check(progress!=null && progress.current().equals("join") && progress.marks().get("quality")==3,"Only logical primary progress advances, independent of physical slot");
+                check(progress!=null && progress.current().equals("join") && progress.marks().values().get("quality")==3,"Only logical primary progress advances, independent of physical slot");
                 check(!progress.checkpoints().contains("insert") && s.menu.getSlot(1).getItem().isEmpty() && s.menu.getSlot(4).getItem().isEmpty(),"Auxiliary history is not merged and each workpiece consumed once");
             }
             s.reset();s.menu.getSlot(1).set(main.copy());s.put(4,Items.IRON_NUGGET,1);s.refresh();s.click(ClickType.PICKUP,0);

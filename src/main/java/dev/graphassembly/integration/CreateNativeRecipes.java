@@ -1,5 +1,7 @@
 package dev.graphassembly.integration;
 
+import dev.graphassembly.recipe.OperationSpec;
+
 import com.simibubi.create.AllRecipeTypes;
 import com.simibubi.create.content.kinetics.saw.CuttingRecipe;
 import com.simibubi.create.content.kinetics.mixer.MixingRecipe;
@@ -11,10 +13,10 @@ import com.simibubi.create.content.processing.basin.BasinRecipe;
 import com.simibubi.create.content.processing.recipe.ProcessingRecipe;
 import com.simibubi.create.content.processing.recipe.StandardProcessingRecipe;
 import com.simibubi.create.infrastructure.config.AllConfigs;
-import dev.graphassembly.core.GraphDefinition;
-import dev.graphassembly.core.Node;
-import dev.graphassembly.integration.stonecutting.StonecuttingDefinition;
-import dev.graphassembly.integration.crafting.CraftingDefinition;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
+import dev.graphassembly.core.definition.basic.NodeDefinition;
+import dev.graphassembly.integration.vanilla.stonecutting.StonecuttingDefinition;
+import dev.graphassembly.integration.vanilla.crafting.CraftingDefinition;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.*;
@@ -30,8 +32,8 @@ public final class CreateNativeRecipes {
         return List.of(deviceType);
     }
     /** Original reference ID owns upstream automation exclusion, not the containing graph ID. */
-    public static ResourceLocation automationId(GraphDefinition graph,Node node) {
-        return ResourceLocation.parse(node.recipe().has("recipe_id")?node.recipe().get("recipe_id").getAsString():graph.id());
+    public static ResourceLocation automationId(GraphDefinition<OperationSpec> graph,NodeDefinition<OperationSpec> node) {
+        return ResourceLocation.parse(node.operation().recipe().has("recipe_id")?node.operation().recipe().get("recipe_id").getAsString():graph.id());
     }
     /** Fan's upstream gate deliberately omits shouldIgnoreInAutomation's serializer tag. */
     public static boolean fanAutomated(GraphOperation operation,AbstractCookingRecipe recipe) {
@@ -52,7 +54,7 @@ public final class CreateNativeRecipes {
             .filter(holder->holder.value().matches(input,level)).findFirst().filter(AllRecipeTypes.CAN_BE_AUTOMATED);
         return smoking.isEmpty()||!ItemStack.isSameItem(smoking.get().value().getResultItem(level.registryAccess()),recipe.getResultItem(level.registryAccess()));
     }
-    public static ProcessingRecipe<?,?> processing(Level level,GraphDefinition graph,Node node,ItemStack primary,RecipeType<?> deviceType) {
+    public static ProcessingRecipe<?,?> processing(Level level,GraphDefinition<OperationSpec> graph,NodeDefinition<OperationSpec> node,ItemStack primary,RecipeType<?> deviceType) {
         if(deviceType==AllRecipeTypes.MIXING.getType()||deviceType==AllRecipeTypes.COMPACTING.getType()) {
             var source=basinSource(level,graph,node,deviceType);
             if(source==null)return null;
@@ -77,7 +79,7 @@ public final class CreateNativeRecipes {
             .withSingleItemOutput(NativeSteps.stack(NativeSteps.primaryOutputItem(graph,node,primary)))
             .duration(50).build();
     }
-    private static CraftingRecipe basinSource(Level level,GraphDefinition graph,Node node,RecipeType<?> deviceType) {
+    private static CraftingRecipe basinSource(Level level,GraphDefinition<OperationSpec> graph,NodeDefinition<OperationSpec> node,RecipeType<?> deviceType) {
         var source=CraftingDefinition.original(level,node);
         if(AllRecipeTypes.shouldIgnoreInAutomation(new RecipeHolder<>(automationId(graph,node),source)))return null;
         boolean compress=MechanicalPressBlockEntity.canCompress(source);
@@ -89,7 +91,7 @@ public final class CreateNativeRecipes {
     }
     /** Reuse original-source qualification at the final basin pre-RNG boundary. */
     public static boolean basinAdmitted(Level level,GraphOperation operation,RecipeType<?> deviceType) {
-        return !CraftingDefinition.SERIALIZERS.contains(operation.node().recipe().get("type").getAsString())
+        return !CraftingDefinition.SERIALIZERS.contains(operation.node().operation().recipe().get("type").getAsString())
             ||basinSource(level,operation.graph(),operation.node(),deviceType)!=null;
     }
     public static boolean crafterAdmitted(Level level,GraphOperation operation,CraftingInput input) {

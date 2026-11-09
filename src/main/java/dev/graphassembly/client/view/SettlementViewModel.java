@@ -1,9 +1,9 @@
 package dev.graphassembly.client.view;
 
-import dev.graphassembly.core.GraphDefinition;
-import dev.graphassembly.core.FinishMode;
-import dev.graphassembly.core.OutputRule;
-import dev.graphassembly.core.WeightedOutput;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
+import dev.graphassembly.core.settlement.FinishMode;
+import dev.graphassembly.core.settlement.OutputRule;
+import dev.graphassembly.core.io.WeightedOutput;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,14 +23,14 @@ public record SettlementViewModel(List<Rule> rules, List<Failure> failures) {
         public Failure { scrap = List.copyOf(scrap); }
     }
 
-    public static SettlementViewModel from(GraphDefinition graph) {
+    public static SettlementViewModel from(GraphDefinition<?> graph) {
         List<Rule> rules = new ArrayList<>();
-        var finishes = graph.nodes().values().stream().filter(node -> node.finish()).map(node -> node.id()).toList();
-        addRules(rules, null, finishes, graph.outputs());
-        graph.nodes().values().forEach(node -> addRules(rules, node.id(), node.finish() ? List.of(node.id()) : List.of(), node.outputs()));
+        var finishes = graph.nodes().values().stream().filter(node -> node.roles().finish()).map(node -> node.id()).toList();
+        addRules(rules, null, finishes, graph.outputRules());
+        graph.nodes().values().forEach(node -> addRules(rules, node.id(), node.roles().finish() ? List.of(node.id()) : List.of(), node.settlement().outputRules()));
         var failures = graph.nodes().values().stream()
-            .filter(node -> node.finish() && node.finishMode() == FinishMode.STRICT)
-            .map(node -> new Failure(node.id(), node.scrap())).toList();
+            .filter(node -> node.roles().finish() && node.settlement().finishMode() == FinishMode.STRICT)
+            .map(node -> new Failure(node.id(), node.settlement().scrapLeaves())).toList();
         return new SettlementViewModel(rules, failures);
     }
 

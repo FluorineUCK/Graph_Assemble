@@ -1,10 +1,12 @@
 package dev.graphassembly.gametest;
 
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.progress.TransitionResult;
+
 import com.google.gson.JsonParser;
 import com.simibubi.create.AllRecipeTypes;
 import com.simibubi.create.content.kinetics.press.PressingRecipe;
 import dev.graphassembly.GraphAssembly;
-import dev.graphassembly.core.*;
 import dev.graphassembly.integration.GraphRuntime;
 import dev.graphassembly.recipe.*;
 import net.minecraft.core.component.DataComponents;
@@ -68,7 +70,7 @@ public final class P4RuntimeGameTests {
             GraphIndex.invalidate();
             var raw = new ItemStack(Items.IRON_INGOT, 7);
             var graph = GraphIndex.get(level).graphs().get("test:p4_loop");
-            var previous = GraphEngine.complete(graph, null, "s", "minecraft:iron_ingot", () -> 0).state();
+            var previous = ((TransitionResult.Continued) GraphPipeline.resolve(GraphPipeline.plan(graph, null, "s", "minecraft:iron_ingot"), () -> 0)).progress();
             var piece = Workpiece.write(new ItemStack(Items.IRON_NUGGET, 3), previous);
             int pieceCount = piece.getCount();
             var first = GraphRuntime.lookup(level, raw, AllRecipeTypes.PRESSING.getType(), PressingRecipe.class, h -> true).first().orElseThrow().value();

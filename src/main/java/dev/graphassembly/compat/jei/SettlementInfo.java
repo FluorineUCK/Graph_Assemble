@@ -1,8 +1,10 @@
 package dev.graphassembly.compat.jei;
 
+import dev.graphassembly.recipe.OperationSpec;
+
 import dev.graphassembly.GraphAssembly;
 import dev.graphassembly.client.view.SettlementDescription;
-import dev.graphassembly.core.GraphDefinition;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
 import dev.graphassembly.integration.NativeSteps;
 import mezz.jei.api.registration.IRecipeRegistration;
 import net.minecraft.network.chat.Component;
@@ -13,7 +15,7 @@ import java.util.ArrayList;
 /** Registers descriptions in JEI's native Information category, which owns wrapping and scrolling. */
 final class SettlementInfo {
     private SettlementInfo() {}
-    static void register(IRecipeRegistration registration, Level level, GraphDefinition graph) {
+    static void register(IRecipeRegistration registration, Level level, GraphDefinition<OperationSpec> graph) {
         var document = SettlementDescription.from(graph);
         var ingredients = new ArrayList<ItemStack>();
         for (var output : document.outputs()) {

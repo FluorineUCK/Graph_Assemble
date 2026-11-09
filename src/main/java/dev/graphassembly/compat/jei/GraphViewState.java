@@ -1,7 +1,7 @@
 package dev.graphassembly.compat.jei;
 
-import dev.graphassembly.core.Edge;
-import dev.graphassembly.core.GraphDefinition;
+import dev.graphassembly.core.definition.basic.Edge;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
 import dev.graphassembly.client.view.GraphGuiLayout;
 import dev.graphassembly.client.view.GraphProjection;
 
@@ -15,22 +15,22 @@ final class GraphViewState {
 
     GraphViewState(boolean sphere) { this.sphere = sphere; }
 
-    GraphViewState(boolean sphere, GraphDefinition graph) {
+    GraphViewState(boolean sphere, GraphDefinition<?> graph) {
         this(sphere);
         resetCamera(graph);
     }
 
     /** Restore this mode's initial camera without changing selection or finish scope. */
-    void resetCamera(GraphDefinition graph) {
+    void resetCamera(GraphDefinition<?> graph) {
         yaw = pitch = panX = panY = 0;
         zoom = 1;
         // Reuse the authored-route overview on explicit reset. Cached view state
         // still prevents resize/reopen from moving the user's camera.
-        if (sphere || graph.edges().stream().allMatch(e -> e.waypoints().isEmpty())) return;
+        if (sphere || graph.topology().edges().stream().allMatch(e -> graph.layout().edge(e).waypoints().isEmpty())) return;
         var xs = new java.util.DoubleSummaryStatistics();
         var ys = new java.util.DoubleSummaryStatistics();
         GraphProjection.layout(graph, false).values().forEach(p -> { xs.accept(p.x()); ys.accept(p.y()); });
-        graph.edges().forEach(e -> e.waypoints().forEach(p -> { xs.accept(p.x()); ys.accept(p.y()); }));
+        graph.topology().edges().forEach(e -> graph.layout().edge(e).waypoints().forEach(p -> { xs.accept(p.x()); ys.accept(p.y()); }));
         double width = GraphGuiLayout.CANVAS.right() - GraphGuiLayout.CANVAS.left() - 16;
         double height = GraphGuiLayout.CANVAS.bottom() - GraphGuiLayout.CANVAS.top() - 16;
         if (xs.getMin() >= -width / 2 && xs.getMax() <= width / 2
@@ -46,17 +46,17 @@ final class GraphViewState {
         return selected != null ? selected : selectedEdge == null ? selectedFinish : null;
     }
 
-    boolean selectFinish(dev.graphassembly.core.GraphDefinition graph, String id) {
+    boolean selectFinish(GraphDefinition<?> graph, String id) {
         var node = graph.nodes().get(id);
-        if (node == null || !node.finish()) return false;
+        if (node == null || !node.roles().finish()) return false;
         selectedFinish = selected = id;
         selectedEdge = null;
         return true;
     }
 
-    void selectNode(dev.graphassembly.core.GraphDefinition graph, String id) {
+    void selectNode(GraphDefinition<?> graph, String id) {
         selected = id;
-        if (id != null && graph.nodes().get(id).finish()) selectFinish(graph, id);
+        if (id != null && graph.nodes().get(id).roles().finish()) selectFinish(graph, id);
     }
 
     void overview() {

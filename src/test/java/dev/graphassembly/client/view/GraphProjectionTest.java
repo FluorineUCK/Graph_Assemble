@@ -2,7 +2,7 @@ package dev.graphassembly.client.view;
 
 import org.junit.jupiter.api.Test;
 import com.google.gson.JsonParser;
-import dev.graphassembly.core.GraphCodec;
+import dev.graphassembly.codec.GraphCodec;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GraphProjectionTest {

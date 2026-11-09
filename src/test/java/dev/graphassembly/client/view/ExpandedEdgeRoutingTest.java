@@ -1,7 +1,9 @@
 package dev.graphassembly.client.view;
 
+import dev.graphassembly.codec.GraphCodec;
+import dev.graphassembly.core.definition.basic.Edge;
+
 import com.google.gson.JsonParser;
-import dev.graphassembly.core.*;
 import dev.graphassembly.client.view.GraphProjection.Projected;
 import dev.graphassembly.client.view.NodePresentation.*;
 import org.junit.jupiter.api.Test;

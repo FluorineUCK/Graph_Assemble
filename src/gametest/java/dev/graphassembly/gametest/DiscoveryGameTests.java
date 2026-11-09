@@ -82,7 +82,7 @@ public final class DiscoveryGameTests {
         var manager = helper.getLevel().getRecipeManager();
         var originals = new ArrayList<RecipeHolder<?>>(manager.getRecipes());
         try {
-            manager.replaceRecipes(List.of(graph("test:unknown", "addon:missing"), graph("test:unsupported", "create:haunting")));
+            manager.replaceRecipes(List.of(graph("test:unknown", "addon:missing"), graph("test:unsupported", "create:conversion")));
             GraphIndex.invalidate();
             var index = GraphIndex.get(helper.getLevel());
             check(index.graphs().isEmpty(), "Unknown and unsupported types must remain disabled");
@@ -90,7 +90,7 @@ public final class DiscoveryGameTests {
             check(unknown.contains("Node s") && unknown.contains("addon:missing") && unknown.contains("Unknown recipe serializer"),
                 "Unknown serializer must be distinguished from a missing device adapter: " + unknown);
             String unsupported = index.disabledReason("test:unsupported");
-            check(unsupported.contains("Node s") && unsupported.contains("create:haunting") && unsupported.contains("IAssemblyRecipe=false")
+            check(unsupported.contains("Node s") && unsupported.contains("create:conversion") && unsupported.contains("IAssemblyRecipe=false")
                     && unsupported.contains("no verified device adapter"),
                 "Registered decodable native type must expose discovered capabilities and missing adapter: " + unsupported);
             helper.succeed();

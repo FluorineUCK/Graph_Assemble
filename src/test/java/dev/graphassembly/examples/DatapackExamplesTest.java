@@ -1,7 +1,7 @@
 package dev.graphassembly.examples;
 
 import com.google.gson.JsonParser;
-import dev.graphassembly.core.GraphCodec;
+import dev.graphassembly.codec.GraphCodec;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 import java.nio.file.Files;

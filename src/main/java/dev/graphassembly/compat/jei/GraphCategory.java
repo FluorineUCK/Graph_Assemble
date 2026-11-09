@@ -1,8 +1,11 @@
 package dev.graphassembly.compat.jei;
 
+import dev.graphassembly.recipe.OperationSpec;
+
+import dev.graphassembly.core.definition.basic.GraphDefinition;
+
 import dev.graphassembly.GraphAssembly;
 import dev.graphassembly.client.view.RecipeViewport;
-import dev.graphassembly.core.*;
 import dev.graphassembly.integration.NativeSteps;
 import dev.graphassembly.integration.GraphPreviewRecipes;
 import com.simibubi.create.content.processing.recipe.ProcessingRecipe;
@@ -17,11 +20,15 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import java.util.*;
 
-public final class GraphCategory implements IRecipeCategory<GraphDefinition> {
+public final class GraphCategory implements IRecipeCategory<GraphCategory.Display> {
+    /** Reifiable JEI payload; keeps erased operation generics out of its Class-based API. */
+    public record Display(GraphDefinition<OperationSpec> graph) {
+        public Display { Objects.requireNonNull(graph); }
+    }
     private final IDrawable icon;
     private final IGuiHelper helper;
     public GraphCategory(IGuiHelper helper) { this.helper = helper; icon = helper.createDrawableItemStack(GraphAssembly.FILTER.get().getDefaultInstance()); }
-    @Override public RecipeType<GraphDefinition> getRecipeType() { return GraphJeiPlugin.TYPE; }
+    @Override public RecipeType<Display> getRecipeType() { return GraphJeiPlugin.TYPE; }
     @Override public Component getTitle() { return Component.translatable("graph_assembly.jei.title"); }
     private static RecipeViewport viewport() {
         var window = Minecraft.getInstance().getWindow();
@@ -30,19 +37,20 @@ public final class GraphCategory implements IRecipeCategory<GraphDefinition> {
     @Override public int getWidth() { return viewport().width(); }
     @Override public int getHeight() { return viewport().height(); }
     @Override public IDrawable getIcon() { return icon; }
-    @Override public ResourceLocation getRegistryName(GraphDefinition recipe) { return ResourceLocation.parse(recipe.id()); }
-    @Override public void setRecipe(IRecipeLayoutBuilder builder, GraphDefinition graph, IFocusGroup focuses) {
+    @Override public ResourceLocation getRegistryName(Display recipe) { return ResourceLocation.parse(recipe.graph().id()); }
+    @Override public void setRecipe(IRecipeLayoutBuilder builder, Display display, IFocusGroup focuses) {
+        var graph = display.graph();
         var level = Minecraft.getInstance().level;
         if (level == null) return;
         var inputs = new ArrayList<net.minecraft.world.item.ItemStack>();
         for (var node : graph.nodes().values()) {
-            if (node.start()) inputs.addAll(Arrays.asList(NativeSteps.ingredient(level, node.ingredient() == null ? graph.ingredient() : node.ingredient()).getItems()));
+            if (node.roles().start()) inputs.addAll(Arrays.asList(NativeSteps.ingredient(level, node.inputs().ingredientOverride() == null ? graph.defaults().ingredient() : node.inputs().ingredientOverride()).getItems()));
             try {
                 var holder = GraphPreviewRecipes.resolve(level, graph, node);
-                if (node.completeRecipe()) {
+                if (node.operation().completeRecipe()) {
                 // Complete native recipes (including custom/hidden ingredients) are indexed
                 // by GraphNativeRecipeLookupPlugin from JEI's supplier, not guessed from a recipe class.
-                } else if (holder.value() instanceof dev.graphassembly.integration.brewing.BrewingRecipe brewing)
+                } else if (holder.value() instanceof dev.graphassembly.integration.vanilla.brewing.BrewingRecipe brewing)
                     inputs.addAll(brewing.previewAddition());
                 else if (holder.value() instanceof ProcessingRecipe<?, ?> processing)
                     GraphRecipeIngredients.addProcessing(builder, processing);
@@ -59,7 +67,8 @@ public final class GraphCategory implements IRecipeCategory<GraphDefinition> {
         groups.finishes().forEach(finish -> finish.scrap().forEach(candidate -> outputs.add(NativeSteps.output(level, candidate.output()))));
         builder.addInvisibleIngredients(RecipeIngredientRole.OUTPUT).addItemStacks(outputs);
     }
-    @Override public void createRecipeExtras(IRecipeExtrasBuilder builder, GraphDefinition graph, IFocusGroup focuses) {
+    @Override public void createRecipeExtras(IRecipeExtrasBuilder builder, Display display, IFocusGroup focuses) {
+        var graph = display.graph();
         var widget = new ResponsiveGraphWidget(new GraphWidget(graph, helper, focuses), viewport());
         builder.addSlottedWidget(widget, widget.allSlots()); builder.addInputHandler(widget);
     }

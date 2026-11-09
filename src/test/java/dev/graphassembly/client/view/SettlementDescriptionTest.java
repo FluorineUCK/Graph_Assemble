@@ -1,14 +1,30 @@
 package dev.graphassembly.client.view;
 
+import dev.graphassembly.recipe.OperationSpec;
+
 import com.google.gson.JsonParser;
-import dev.graphassembly.core.GraphDefinition;
-import dev.graphassembly.core.WeightedOutput;
-import dev.graphassembly.core.GraphCodec;
+import dev.graphassembly.core.definition.basic.GraphDefinition;
+import dev.graphassembly.core.io.WeightedOutput;
+import dev.graphassembly.codec.GraphCodec;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SettlementDescriptionTest {
+    @Test void conditionalEdgesAreVisibleInInfoAndUseTheSameTooltipRequirements() {
+        var graph=parse("""
+            {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
+             "nodes":[{"id":"s","start":true,"recipe":{"type":"create:pressing"}},{"id":"f","finish":true,"recipe":{"type":"create:pressing"}}],
+             "edges":[{"from":"s","to":"f","requirements":{"mark_ranges":{"quality":{"min":2}},"checkpoints":["s"]}}]}
+            """);
+        var requirements=SettlementDescription.edgeConditions(graph.topology().outgoing("s").getFirst());
+        assertTrue(requirements.stream().anyMatch(line->line.key().equals("mark_range")));
+        assertTrue(requirements.stream().anyMatch(line->line.key().equals("checkpoints.sequence")&&line.arguments().equals(List.of("s"))));
+        var lines=SettlementDescription.from(graph).paragraphs();
+        assertTrue(lines.containsAll(requirements));
+        assertTrue(lines.stream().anyMatch(line->line.key().equals("edges.timing")));
+        assertTrue(lines.stream().anyMatch(line->line.key().equals("requirements.ranges")));
+    }
     @Test void progressActionsShareOrderedCopyWithNodeTooltipsAndExplainSettlementTiming() {
         var graph=parse("""
             {"ingredient":{"item":"minecraft:iron_ingot"},"transitional_item":"minecraft:iron_nugget",
@@ -132,7 +148,7 @@ class SettlementDescriptionTest {
         assertTrue(document.paragraphs().stream().anyMatch(p -> p.key().equals("finish.none")),
             "Unreachable configured rules must still be explained, not silently deleted");
     }
-    private static GraphDefinition parse(String json) {
+    private static GraphDefinition<OperationSpec> parse(String json) {
         return GraphCodec.parse("test:info", JsonParser.parseString(json).getAsJsonObject());
     }
     @Test void fullLongCheckpointSequenceAndOutputComponentsReachTheInfoDocumentUnabridged() {
@@ -153,7 +169,7 @@ class SettlementDescriptionTest {
         var graph = GraphCodec.parse("test:long_info", json);
         var document = SettlementDescription.from(graph);
         var sequence = document.paragraphs().stream().filter(p -> p.key().equals("checkpoints.sequence")).findFirst().orElseThrow();
-        assertEquals(String.join(" → ", graph.outputs().getFirst().requirements().checkpoints().nodes()), sequence.arguments().getFirst(),
+        assertEquals(String.join(" → ", graph.outputRules().getFirst().requirements().checkpoints().match().nodes()), sequence.arguments().getFirst(),
             "Player-facing paths retain every visit without Java collection brackets");
         assertTrue(document.paragraphs().stream().anyMatch(p -> p.key().equals("marks.exact.empty")));
         assertTrue(document.paragraphs().stream().anyMatch(p -> p.key().equals("checkpoints.subsequence")));

@@ -1,7 +1,8 @@
 package dev.graphassembly.filter;
 
-import com.google.gson.*;
-import dev.graphassembly.core.*;
+import dev.graphassembly.core.GraphPipeline;
+import dev.graphassembly.core.route.RouteResolver;
+
 import dev.graphassembly.recipe.*;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -36,12 +37,12 @@ public record FilterSelection(String graph, List<String> targets, Set<String> in
             var state = Workpiece.read(level, input);
             Set<String> available;
             if (state != null) {
-                if (!state.graphId().equals(graph) || GraphEngine.incompatibility(definition, state) != null) return false;
-                available = Set.copyOf(GraphEngine.allowed(definition, state));
+                if (!state.graphId().equals(graph) || RouteResolver.incompatibility(definition, state) != null) return false;
+                available = Set.copyOf(GraphPipeline.allowed(definition, state));
             } else {
                 if (input.has(com.simibubi.create.AllDataComponents.SEQUENCED_ASSEMBLY)) return false;
                 available = new HashSet<>();
-                for (String id : GraphEngine.allowed(definition, null))
+                for (String id : GraphPipeline.allowed(definition, null))
                     if (index.entrance(graph, id).test(input)) available.add(id);
             }
             // Establish the selected graph's actionable input domain before applying NOT/NONE.

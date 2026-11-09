@@ -1,11 +1,15 @@
 package dev.graphassembly.integration;
 
+import dev.graphassembly.recipe.OperationSpec;
+
+import dev.graphassembly.core.definition.basic.GraphDefinition;
+import dev.graphassembly.core.definition.basic.NodeDefinition;
+import dev.graphassembly.recipe.RecipeMode;
+import dev.graphassembly.core.settlement.FinishMode;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import dev.graphassembly.core.GraphDefinition;
-import dev.graphassembly.core.Node;
-import dev.graphassembly.core.FinishMode;
 import java.util.*;
 
 /** Materializes inline preview data without asserting that a device can execute it. */
@@ -16,33 +20,33 @@ public final class PreviewRecipeData {
         public UnknownDynamicCarrier(String node){super("Dynamic native carrier is not statically known before node "+node);}
     }
     // Pure structural metadata: this dataflow must not initialize native game/codec adapters.
-    public static boolean dynamicCarrier(Node node) {
-        return switch(node.recipe().get("type").getAsString()) {
+    public static boolean dynamicCarrier(NodeDefinition<OperationSpec> node) {
+        return switch(node.operation().recipe().get("type").getAsString()) {
             case "graph_assembly:anvil", "graph_assembly:brewing", "minecraft:smithing_trim", "minecraft:crafting_special_armordye", "minecraft:crafting_special_repairitem" -> true;
             default -> false;
         };
     }
 
     /** A representative inline view, not a new entrance or an execution recipe. */
-    public static JsonObject forNode(GraphDefinition graph, Node node) {
-        if (node.nativeRecipe()) return node.recipe();
-        if (isOperationDescriptor(node.recipe()) && !node.recipe().has("recipe_id"))
-            return node.recipe().deepCopy();
-        if (node.start() && node.workpieceInput(0) == null) {
-            return materialize(node.recipe(), node.ingredient() == null ? graph.ingredient() : node.ingredient(),
-                node.transitionalItem() == null ? graph.transitionalItem() : node.transitionalItem());
+    public static JsonObject forNode(GraphDefinition<OperationSpec> graph, NodeDefinition<OperationSpec> node) {
+        if ((node.operation().recipeMode() == RecipeMode.NATIVE)) return node.operation().recipe();
+        if (isOperationDescriptor(node.operation().recipe()) && !node.operation().recipe().has("recipe_id"))
+            return node.operation().recipe().deepCopy();
+        if (node.roles().start() && node.inputs().workpieceInput(0) == null) {
+            return materialize(node.operation().recipe(), node.inputs().ingredientOverride() == null ? graph.defaults().ingredient() : node.inputs().ingredientOverride(),
+                node.effects().carrierOverride() == null ? graph.defaults().transitionalItem() : node.effects().carrierOverride());
         }
         // A carrier override changes the OUTPUT of this step, never its input.
         // At a multi-carrier merge, show one consistent input/output pair rather
         // than presenting alternative carriers as simultaneously consumed items.
         var inputs = carriedInputs(graph, node);
-        String input = inputs.isEmpty() ? graph.transitionalItem() : inputs.getFirst();
-        return materialize(node.recipe(), input, node.transitionalItem() == null ? input : node.transitionalItem());
+        String input = inputs.isEmpty() ? graph.defaults().transitionalItem() : inputs.getFirst();
+        return materialize(node.operation().recipe(), input, node.effects().carrierOverride() == null ? input : node.effects().carrierOverride());
     }
 
     /** Reachable carrier identities before a node; finite dataflow also handles loops.
      * History/reward predicates still belong to runtime; current_nodes filters primary edges here. */
-    public static List<String> carriedInputs(GraphDefinition graph, Node target) {
+    public static List<String> carriedInputs(GraphDefinition<OperationSpec> graph, NodeDefinition<OperationSpec> target) {
         // Null item is an unknown native result, never the graph default. Keeping it in
         // the same finite traversal also prevents mixed known/unknown merges looking complete.
         record State(String node, String item) {}
@@ -50,23 +54,23 @@ public final class PreviewRecipeData {
         var seen = new HashSet<State>();
         var inputs = new LinkedHashSet<String>();
         boolean unknown=false;
-        for (var node : graph.nodes().values()) if (node.start() && node.workpieceInput(0) == null) {
-            var seed = new State(node.id(),dynamicCarrier(node)?null:node.transitionalItem() == null ? graph.transitionalItem() : node.transitionalItem());
+        for (var node : graph.nodes().values()) if (node.roles().start() && node.inputs().workpieceInput(0) == null) {
+            var seed = new State(node.id(),dynamicCarrier(node)?null:node.effects().carrierOverride() == null ? graph.defaults().transitionalItem() : node.effects().carrierOverride());
             if (seen.add(seed)) queue.add(seed);
         }
         while (!queue.isEmpty()) {
             var state = queue.remove();
             var previous = graph.nodes().get(state.node());
-            if (previous.finish() && previous.finishMode() == FinishMode.STRICT) continue;
-            var targets = previous.route() == null
-                ? graph.outgoing(state.node()).stream().map(edge -> edge.to()).toList()
-                : List.of(previous.route().node());
+            if (previous.roles().finish() && previous.settlement().finishMode() == FinishMode.STRICT) continue;
+            var targets = previous.routing().redirect() == null
+                ? graph.topology().outgoing(state.node()).stream().map(edge -> edge.to()).toList()
+                : List.of(previous.routing().redirect().pendingRoute().node());
             for (var nextId : targets) {
                 var next = graph.nodes().get(nextId);
-                var primary = next.workpieceInput(0);
+                var primary = next.inputs().workpieceInput(0);
                 if (primary != null && !primary.currentNodes().isEmpty() && !primary.currentNodes().contains(state.node())) continue;
                 if (next.id().equals(target.id())) {if(state.item()==null)unknown=true;else inputs.add(state.item());}
-                var after = new State(next.id(),dynamicCarrier(next)?null:next.transitionalItem() == null ? state.item() : next.transitionalItem());
+                var after = new State(next.id(),dynamicCarrier(next)?null:next.effects().carrierOverride() == null ? state.item() : next.effects().carrierOverride());
                 if (seen.add(after)) queue.add(after);
             }
         }
@@ -76,8 +80,8 @@ public final class PreviewRecipeData {
 
     /** Supplier candidates are authoritative display data. Hide only proven internal items;
      * an unknown dynamic carrier means hide none, not discard the supplier's auxiliaries. */
-    public static List<String> nativeInputsToHide(GraphDefinition graph,Node node) {
-        if(node.start()||node.completeRecipe())return List.of();
+    public static List<String> nativeInputsToHide(GraphDefinition<OperationSpec> graph,NodeDefinition<OperationSpec> node) {
+        if(node.roles().start()||node.operation().completeRecipe())return List.of();
         try{return carriedInputs(graph,node);}
         catch(UnknownDynamicCarrier unknown){return List.of();}
     }

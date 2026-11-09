@@ -5,7 +5,8 @@ import com.simibubi.create.AllCreativeModeTabs;
 import com.simibubi.create.AllItems;
 import com.mojang.serialization.Codec;
 import dev.graphassembly.recipe.GraphRecipe;
-import dev.graphassembly.integration.brewing.BrewingRecipe;
+import dev.graphassembly.integration.sequence.SequenceStepRecipe;
+import dev.graphassembly.integration.vanilla.brewing.BrewingRecipe;
 import dev.graphassembly.recipe.GraphSerializer;
 import dev.graphassembly.recipe.ProgressStringCodec;
 import dev.graphassembly.recipe.RuntimeSnapshots;
@@ -47,10 +48,10 @@ public final class GraphAssembly {
     public static final DeferredHolder<RecipeType<?>, RecipeType<GraphRecipe>> RECIPE_TYPE = TYPES.register("assembly", () -> new RecipeType<>() {
         @Override public String toString() { return ID + ":assembly"; }
     });
-    public static final DeferredHolder<RecipeType<?>, RecipeType<dev.graphassembly.integration.anvil.AnvilRecipe>> ANVIL_TYPE = TYPES.register("anvil", () -> new RecipeType<>() {
+    public static final DeferredHolder<RecipeType<?>, RecipeType<dev.graphassembly.integration.vanilla.anvil.AnvilRecipe>> ANVIL_TYPE = TYPES.register("anvil", () -> new RecipeType<>() {
         @Override public String toString(){return ID+":anvil";}
     });
-    public static final DeferredHolder<RecipeSerializer<?>, dev.graphassembly.integration.anvil.AnvilRecipe.Serializer> ANVIL_SERIALIZER = SERIALIZERS.register("anvil",dev.graphassembly.integration.anvil.AnvilRecipe.Serializer::new);
+    public static final DeferredHolder<RecipeSerializer<?>, dev.graphassembly.integration.vanilla.anvil.AnvilRecipe.Serializer> ANVIL_SERIALIZER = SERIALIZERS.register("anvil",dev.graphassembly.integration.vanilla.anvil.AnvilRecipe.Serializer::new);
     public static final DeferredHolder<RecipeType<?>, RecipeType<BrewingRecipe>> BREWING_TYPE = TYPES.register("brewing", () -> new RecipeType<>() {
         @Override public String toString() { return ID + ":brewing"; }
     });
@@ -58,6 +59,12 @@ public final class GraphAssembly {
         SERIALIZERS.register("brewing", BrewingRecipe.Serializer::new);
 
     public static final DeferredHolder<RecipeSerializer<?>, GraphSerializer> SERIALIZER = SERIALIZERS.register("assembly", GraphSerializer::new);
+
+    public static final DeferredHolder<RecipeType<?>, RecipeType<SequenceStepRecipe>> SEQUENCE_STEP_TYPE = TYPES.register("sequence_step", () -> new RecipeType<>() {
+        @Override public String toString() { return ID + ":sequence_step"; }
+    });
+    public static final DeferredHolder<RecipeSerializer<?>, SequenceStepRecipe.Serializer> SEQUENCE_STEP_SERIALIZER =
+        SERIALIZERS.register("sequence_step", SequenceStepRecipe.Serializer::new);
 
     public static final DeferredHolder<Item, GraphFilterItem> FILTER = ITEMS.register("graph_filter",
             () -> new GraphFilterItem(new Item.Properties().stacksTo(1)
@@ -80,12 +87,14 @@ public final class GraphAssembly {
 
     private static void serverStopped(ServerStoppedEvent event) {
         RuntimeSnapshots.release(event.getServer().getRecipeManager());
-        dev.graphassembly.integration.projection.NativeRecipeCatalog.release(event.getServer().getRecipeManager());
+        dev.graphassembly.integration.bridge.NativeRecipeCatalog.release(event.getServer().getRecipeManager());
+        dev.graphassembly.integration.sequence.NativeSequences.release(event.getServer().getRecipeManager());
     }
     private static void levelUnloaded(LevelEvent.Unload event) {
         if (event.getLevel() instanceof Level level && level.isClientSide()) {
             RuntimeSnapshots.release(level.getRecipeManager());
-            dev.graphassembly.integration.projection.NativeRecipeCatalog.release(level.getRecipeManager());
+            dev.graphassembly.integration.bridge.NativeRecipeCatalog.release(level.getRecipeManager());
+            dev.graphassembly.integration.sequence.NativeSequences.release(level.getRecipeManager());
         }
     }
 

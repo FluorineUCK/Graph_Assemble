@@ -1,11 +1,16 @@
 package dev.graphassembly.client.view;
 
+import dev.graphassembly.recipe.OperationSpec;
+
+import dev.graphassembly.core.definition.basic.Edge;
+import dev.graphassembly.core.definition.basic.NodeDefinition;
+
 /** Pure display policy; never modifies graph execution state. */
 public final class NodePresentation {
     private NodePresentation() {}
     private static final int MACHINE_BADGE_SIZE = 16;
     /** Native dynamic results have no statically truthful carrier/default-item tooltip. */
-    public static boolean showStaticCarrier(dev.graphassembly.core.Node node) {
+    public static boolean showStaticCarrier(NodeDefinition<OperationSpec> node) {
         return !dev.graphassembly.integration.PreviewRecipeData.dynamicCarrier(node);
     }
     public record Bounds(double left, double top, double right, double bottom) {
@@ -37,7 +42,7 @@ public final class NodePresentation {
         return nodes.stream().filter(n -> n.front() && n.bounds().contains(x, y))
             .max(java.util.Comparator.comparingDouble(Surface::depth).thenComparing(Surface::id)).orElse(null);
     }
-    public record Hit(Surface node, dev.graphassembly.core.Edge edge) {}
+    public record Hit(Surface node, Edge edge) {}
     /** Shared canvas priority: the foremost node (including its slots) occludes edges. */
     public static Hit pick(java.util.List<Surface> nodes, java.util.List<GraphEdges.Path> edges,
                            Bounds viewport, double x, double y) {
